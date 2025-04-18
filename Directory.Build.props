@@ -1,0 +1,34 @@
+<Project>
+    <PropertyGroup>
+        <Authors>Daniel Martin</Authors>
+        <Company>Zooper</Company>
+        <Copyright>Copyright © Zooper $([System.DateTime]::Now.ToString('yyyy'))</Copyright>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/zooper-lib/Bee</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/zooper-lib/Bee</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageIcon>icon.png</PackageIcon>
+        <PackageTags>discriminated-union;oneOf;source-generator;C#</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <Description>A .NET source generator for creating discriminated unions in C# with OneOf.</Description>
+
+        <!-- Version information -->
+        <Version>1.0.2</Version>
+
+        <!-- Source linking -->
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+        <!-- Use latest C# version -->
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" />
+        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+</Project>
