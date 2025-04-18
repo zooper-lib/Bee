@@ -2,13 +2,7 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee", "Zooper.Bee\Zooper.Bee.csproj", "{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Generators", "Zooper.Bee.Generators\Zooper.Bee.Generators.csproj", "{20DE9BFC-1D34-44E7-B409-C957F59A74F3}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Generators.Sample", "Zooper.Bee.Generators.Sample\Zooper.Bee.Generators.Sample.csproj", "{E24C5A5F-8969-4906-B6A7-3DF4A3580710}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Generators.Tests", "Zooper.Bee.Generators.Tests\Zooper.Bee.Generators.Tests.csproj", "{372982CC-39D1-4437-B386-6E036ED74A94}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Generators.Attributes", "Zooper.Bee.Generators.Attributes\Zooper.Bee.Generators.Attributes.csproj", "{2F6C04E0-AE08-4281-AE2A-86A7C8ECA387}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Example", "Zooper.Bee.Example\Zooper.Bee.Example.csproj", "{F654D462-40EE-40D1-9871-CF9DFAC82A90}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -20,21 +14,9 @@ Global
 		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{20DE9BFC-1D34-44E7-B409-C957F59A74F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{20DE9BFC-1D34-44E7-B409-C957F59A74F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{20DE9BFC-1D34-44E7-B409-C957F59A74F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{20DE9BFC-1D34-44E7-B409-C957F59A74F3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E24C5A5F-8969-4906-B6A7-3DF4A3580710}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E24C5A5F-8969-4906-B6A7-3DF4A3580710}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E24C5A5F-8969-4906-B6A7-3DF4A3580710}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E24C5A5F-8969-4906-B6A7-3DF4A3580710}.Release|Any CPU.Build.0 = Release|Any CPU
-		{372982CC-39D1-4437-B386-6E036ED74A94}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{372982CC-39D1-4437-B386-6E036ED74A94}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{372982CC-39D1-4437-B386-6E036ED74A94}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{372982CC-39D1-4437-B386-6E036ED74A94}.Release|Any CPU.Build.0 = Release|Any CPU
-		{2F6C04E0-AE08-4281-AE2A-86A7C8ECA387}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2F6C04E0-AE08-4281-AE2A-86A7C8ECA387}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2F6C04E0-AE08-4281-AE2A-86A7C8ECA387}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2F6C04E0-AE08-4281-AE2A-86A7C8ECA387}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
