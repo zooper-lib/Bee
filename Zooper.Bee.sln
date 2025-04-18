@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee", "Zooper.Bee\Zooper.Bee.csproj", "{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Example", "Zooper.Bee.Example\Zooper.Bee.Example.csproj", "{F654D462-40EE-40D1-9871-CF9DFAC82A90}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1305258-6F20-4DDB-86A3-EDFB4EAAEE3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
