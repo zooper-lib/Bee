@@ -8,12 +8,12 @@
         <RepositoryUrl>https://github.com/zooper-lib/Bee</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>icon.png</PackageIcon>
-        <PackageTags>discriminated-union;oneOf;source-generator;C#</PackageTags>
+        <PackageTags>workflow;builder;pipeline;functional;either;C#</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <Description>A .NET source generator for creating discriminated unions in C# with OneOf.</Description>
+        <Description>A .NET library for building robust, functional workflows and processing pipelines.</Description>
 
         <!-- Version information -->
-        <Version>1.0.2</Version>
+        <Version>1.0.0</Version>
 
         <!-- Source linking -->
         <PublishRepositoryUrl>true</PublishRepositoryUrl>

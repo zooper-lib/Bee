@@ -1,0 +1,39 @@
+name: Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: "8.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build the solution
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test --no-restore --verbosity normal
+
+      - name: Check build warnings as errors
+        run: |
+          # This step ensures that TreatWarningsAsErrors is respected
+          dotnet build --configuration Release --no-restore --verbosity detailed | tee build.log
+          if grep -q "warning" build.log; then
+            echo "Build warnings found. Check the build log for details."
+            cat build.log | grep -i warning
+            exit 1
+          fi
