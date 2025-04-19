@@ -5,7 +5,7 @@ namespace Zooper.Bee.Internal;
 /// <summary>
 /// Provides extension methods for the <see cref="Option{T}"/> class.
 /// </summary>
-internal static class OptionExtensions
+static internal class OptionExtensions
 {
 	/// <summary>
 	/// Creates an Option instance that contains a value (Some).

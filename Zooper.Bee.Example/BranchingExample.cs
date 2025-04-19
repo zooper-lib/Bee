@@ -115,34 +115,38 @@ public class BranchingExample
 				payload with { IsRegistered = true });
 		})
 		// Branch the workflow based on membership type
-		.Branch(payload => payload.IsVipMember)
-			.Do(payload =>
-			{
-				Console.WriteLine("Activating VIP benefits...");
+		.Branch(
+			payload => payload.IsVipMember,
+			branch => branch
+				.Do(payload =>
+				{
+					Console.WriteLine("Activating VIP benefits...");
 
-				return Either<RegistrationError, RegistrationPayload>.FromRight(
-					payload with
-					{
-						VipBenefitsActivated = true,
-						AccountType = "VIP"
-					});
-			})
-			.Do(payload =>
-			{
-				Console.WriteLine("Setting up premium support access...");
+					return Either<RegistrationError, RegistrationPayload>.FromRight(
+						payload with
+						{
+							VipBenefitsActivated = true,
+							AccountType = "VIP"
+						});
+				})
+				.Do(payload =>
+				{
+					Console.WriteLine("Setting up premium support access...");
 
-				return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
-			})
-		.EndBranch()
+					return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
+				})
+		)
 		// Branch for standard users
-		.Branch(payload => !payload.IsVipMember)
-			.Do(payload =>
-			{
-				Console.WriteLine("Setting up standard account features...");
+		.Branch(
+			payload => !payload.IsVipMember,
+			branch => branch
+				.Do(payload =>
+				{
+					Console.WriteLine("Setting up standard account features...");
 
-				return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
-			})
-		.EndBranch()
+					return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
+				})
+		)
 		// Send welcome email to all users
 		.Do(payload =>
 		{

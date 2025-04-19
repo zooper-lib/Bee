@@ -5,7 +5,7 @@ namespace Zooper.Bee.Internal;
 /// <summary>
 /// Provides extension methods for the <see cref="Either{TLeft, TRight}"/> class.
 /// </summary>
-internal static class EitherExtensions
+static internal class EitherExtensions
 {
 	/// <summary>
 	/// Creates a new Either instance representing a successful result (Right value).

@@ -19,14 +19,6 @@ namespace Zooper.Bee;
 /// <remarks>
 /// Initializes a new instance of the <see cref="WorkflowBuilder{TRequest, TContext, TSuccess, TError}"/> class.
 /// </remarks>
-/// <param name="contextFactory">
-/// Factory function that takes a request of type <typeparamref name="TRequest"/>
-/// and produces a context of type <typeparamref name="TPayload"/>.
-/// </param>
-/// <param name="resultSelector">
-/// Selector function that converts the final <typeparamref name="TPayload"/>
-/// into a success result of type <typeparamref name="TSuccess"/>.
-/// </param>
 public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 {
 	private readonly Func<TRequest, TPayload> _contextFactory;
@@ -191,6 +183,40 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		var branch = new Branch<TPayload, TError>(condition);
 		_branches.Add(branch);
 		return new BranchBuilder<TRequest, TPayload, TSuccess, TError>(this, branch);
+	}
+
+	/// <summary>
+	/// Creates a branch in the workflow that will only execute if the condition is true.
+	/// </summary>
+	/// <param name="condition">The condition to evaluate</param>
+	/// <param name="branchConfiguration">An action that configures the branch</param>
+	/// <returns>The workflow builder to continue the workflow definition</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Branch(
+		Func<TPayload, bool> condition,
+		Action<BranchBuilder<TRequest, TPayload, TSuccess, TError>> branchConfiguration)
+	{
+		var branch = new Branch<TPayload, TError>(condition);
+		_branches.Add(branch);
+		var branchBuilder = new BranchBuilder<TRequest, TPayload, TSuccess, TError>(this, branch);
+		branchConfiguration(branchBuilder);
+		return this;
+	}
+
+	/// <summary>
+	/// Creates a branch in the workflow that always executes.
+	/// This is a convenience method for organizing related activities.
+	/// </summary>
+	/// <param name="branchConfiguration">An action that configures the branch</param>
+	/// <returns>The workflow builder to continue the workflow definition</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Branch(
+		Action<BranchBuilder<TRequest, TPayload, TSuccess, TError>> branchConfiguration)
+	{
+		// Create a branch with a condition that always returns true
+		var branch = new Branch<TPayload, TError>(_ => true);
+		_branches.Add(branch);
+		var branchBuilder = new BranchBuilder<TRequest, TPayload, TSuccess, TError>(this, branch);
+		branchConfiguration(branchBuilder);
+		return this;
 	}
 
 	/// <summary>
