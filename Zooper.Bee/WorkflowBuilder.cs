@@ -19,14 +19,6 @@ namespace Zooper.Bee;
 /// <remarks>
 /// Initializes a new instance of the <see cref="WorkflowBuilder{TRequest, TContext, TSuccess, TError}"/> class.
 /// </remarks>
-/// <param name="contextFactory">
-/// Factory function that takes a request of type <typeparamref name="TRequest"/>
-/// and produces a context of type <typeparamref name="TPayload"/>.
-/// </param>
-/// <param name="resultSelector">
-/// Selector function that converts the final <typeparamref name="TPayload"/>
-/// into a success result of type <typeparamref name="TSuccess"/>.
-/// </param>
 public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 {
 	private readonly Func<TRequest, TPayload> _contextFactory;
