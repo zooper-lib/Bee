@@ -194,6 +194,23 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	}
 
 	/// <summary>
+	/// Creates a branch in the workflow that will only execute if the condition is true.
+	/// </summary>
+	/// <param name="condition">The condition to evaluate</param>
+	/// <param name="branchConfiguration">An action that configures the branch</param>
+	/// <returns>The workflow builder to continue the workflow definition</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Branch(
+		Func<TPayload, bool> condition,
+		Action<BranchBuilder<TRequest, TPayload, TSuccess, TError>> branchConfiguration)
+	{
+		var branch = new Branch<TPayload, TError>(condition);
+		_branches.Add(branch);
+		var branchBuilder = new BranchBuilder<TRequest, TPayload, TSuccess, TError>(this, branch);
+		branchConfiguration(branchBuilder);
+		return this;
+	}
+
+	/// <summary>
 	/// Adds an activity to the finally block that will always execute, even if the workflow fails.
 	/// </summary>
 	/// <param name="activity">The activity to execute</param>
