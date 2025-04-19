@@ -80,6 +80,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	/// Returns to the main workflow builder to continue defining the workflow.
 	/// </summary>
 	/// <returns>The main workflow builder</returns>
+	[Obsolete("EndBranch is deprecated. Use the new callback-style Branch method instead: .Branch(condition, branch => branch.Do(...))")]
 	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> EndBranch()
 	{
 		return _workflow;

@@ -13,7 +13,7 @@
         <Description>A .NET library for building robust, functional workflows and processing pipelines.</Description>
 
         <!-- Version information -->
-        <Version>1.0.0</Version>
+        <Version>2.0.0</Version>
 
         <!-- Source linking -->
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
