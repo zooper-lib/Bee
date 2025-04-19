@@ -203,6 +203,23 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	}
 
 	/// <summary>
+	/// Creates a branch in the workflow that always executes.
+	/// This is a convenience method for organizing related activities.
+	/// </summary>
+	/// <param name="branchConfiguration">An action that configures the branch</param>
+	/// <returns>The workflow builder to continue the workflow definition</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Branch(
+		Action<BranchBuilder<TRequest, TPayload, TSuccess, TError>> branchConfiguration)
+	{
+		// Create a branch with a condition that always returns true
+		var branch = new Branch<TPayload, TError>(_ => true);
+		_branches.Add(branch);
+		var branchBuilder = new BranchBuilder<TRequest, TPayload, TSuccess, TError>(this, branch);
+		branchConfiguration(branchBuilder);
+		return this;
+	}
+
+	/// <summary>
 	/// Adds an activity to the finally block that will always execute, even if the workflow fails.
 	/// </summary>
 	/// <param name="activity">The activity to execute</param>
