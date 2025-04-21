@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-05-01
+
+### Added
+
+- Complete redesign of the workflow feature API
+  - New `Group` method that groups activities with an optional condition
+  - New `WithContext` method for isolated contexts with their own local state
+  - New `Detach` method for executing activities without merging their results back
+  - New `Parallel` method for parallel execution of multiple groups
+  - New `ParallelDetached` method for parallel execution of detached activities
+- Better support for nullable conditions - all new methods accept nullable condition
+- Clear separation of merged and non-merged execution paths
+- Improved naming consistency across the API
+
+### Changed
+
+- **BREAKING CHANGE**: Reorganized internal class structure
+  - Added feature-specific namespaces and folders
+  - Created a consistent `IWorkflowFeature` interface for all features
+- **BREAKING CHANGE**: Renamed `Branch` to `Group` for better clarity
+- **BREAKING CHANGE**: Renamed `BranchWithLocalPayload` to `WithContext` to better express intention
+
+### Deprecated
+
+- The old `Branch` method is now marked as obsolete and will be removed in a future version
+- The old `BranchWithLocalPayload` method is now marked as obsolete and will be removed in a future version
+
+### Compatibility
+
+- All existing code using the deprecated methods will continue to work, but will show deprecation warnings
+- To migrate, replace:
+
+  ```csharp
+  .Branch(condition, branch => branch.Do(...))
+  ```
+
+  With:
+
+  ```csharp
+  .Group(condition, group => group.Do(...))
+  ```
+
+  And replace:
+
+  ```csharp
+  .BranchWithLocalPayload(condition, factory, branch => branch.Do(...))
+  ```
+
+  With:
+
+  ```csharp
+  .WithContext(condition, factory, context => context.Do(...))
+  ```
+
 ## [2.2.0] - 2025-04-25
 
 ### Added

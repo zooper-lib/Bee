@@ -5,19 +5,19 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Zooper.Bee.svg)](https://www.nuget.org/packages/Zooper.Bee/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Zooper.Bee is a fluent, lightweight workflow framework for C# that enables you to build type-safe, declarative business workflows with robust error handling.
+A flexible and powerful workflow library for .NET that allows you to define complex business processes with a fluent API.
 
-## Key Features
+## Overview
 
-- **Fluent Builder API**: Create workflows with an intuitive, chainable syntax
-- **Type-safe**: Leverage C#'s static typing for error-resistant workflows
-- **Functional Style**: Uses an Either monad pattern for clear success/failure handling
-- **Composable**: Build complex workflows from simple, reusable components
-- **Comprehensive**: Support for validations, conditional activities, branches, and finally blocks
-- **Isolated Branches**: Create branches with their own isolated local payload types
-- **Async-first**: First-class support for async/await operations
-- **Testable**: Workflows built with Zooper.Bee are easy to unit test
-- **No Dependencies**: Minimal external dependencies (only uses Zooper.Fox)
+Zooper.Bee lets you create workflows that process requests and produce either successful results or meaningful errors. The library uses a builder pattern to construct workflows with various execution patterns including sequential, conditional, parallel, and detached operations.
+
+## Key Concepts
+
+- **Workflow**: A sequence of operations that process a request to produce a result or error
+- **Request**: The input data to the workflow
+- **Payload**: Data that passes through and gets modified by workflow activities
+- **Success**: The successful result of the workflow
+- **Error**: The error result if the workflow fails
 
 ## Installation
 
@@ -25,182 +25,267 @@ Zooper.Bee is a fluent, lightweight workflow framework for C# that enables you t
 dotnet add package Zooper.Bee
 ```
 
-## Quick Start
-
-Here's a basic example of creating and executing a workflow:
+## Getting Started
 
 ```csharp
-// Define your models
-public record OrderRequest(string CustomerId, decimal Amount);
-public record OrderPayload(OrderRequest Request, Guid OrderId, bool IsProcessed);
-public record OrderConfirmation(Guid OrderId, DateTime ProcessedAt);
-public record OrderError(string Code, string Message);
+// Define a simple workflow
+var workflow = new WorkflowBuilder<Request, Payload, SuccessResult, ErrorResult>(
+    // Factory function that creates the initial payload from the request
+    request => new Payload { Data = request.Data },
 
-// Create a workflow
-var workflow = new WorkflowBuilder<OrderRequest, OrderPayload, OrderConfirmation, OrderError>(
-    // Initial payload factory
-    request => new OrderPayload(request, Guid.NewGuid(), false),
-    // Result selector
-    payload => new OrderConfirmation(payload.OrderId, DateTime.UtcNow))
+    // Selector function that creates the success result from the final payload
+    payload => new SuccessResult { ProcessedData = payload.Data }
+)
+.Validate(request =>
+{
+    // Validate the request
+    if (string.IsNullOrEmpty(request.Data))
+        return Option<ErrorResult>.Some(new ErrorResult { Message = "Data is required" });
 
-    // Add validations
-    .Validate(request =>
-        string.IsNullOrEmpty(request.CustomerId)
-            ? Option<OrderError>.Some(new OrderError("INVALID_CUSTOMER", "Customer ID required"))
-            : Option<OrderError>.None())
-
-    // Add activities
-    .Do(ProcessPayment)
-    .Do(UpdateInventory)
-
-    // Add conditional activities
-    .DoIf(
-        payload => payload.Request.Amount > 1000,
-        ApplyHighValueDiscount)
-
-    // Add finally activities
-    .Finally(LogOrderProcessing)
-
-    // Build the workflow
-    .Build();
+    return Option<ErrorResult>.None;
+})
+.Do(payload =>
+{
+    // Process the payload
+    payload.Data = payload.Data.ToUpper();
+    return Either<ErrorResult, Payload>.FromRight(payload);
+})
+.Build();
 
 // Execute the workflow
-var result = await workflow.Execute(new OrderRequest("CUST123", 299.99));
-
-// Handle the result
+var result = await workflow.Execute(new Request { Data = "hello world" }, CancellationToken.None);
 if (result.IsRight)
 {
-    var confirmation = result.Right;
-    Console.WriteLine($"Order {confirmation.OrderId} processed at {confirmation.ProcessedAt}");
+    Console.WriteLine($"Success: {result.Right.ProcessedData}"); // Output: Success: HELLO WORLD
 }
 else
 {
-    var error = result.Left;
-    Console.WriteLine($"Error: {error.Code} - {error.Message}");
+    Console.WriteLine($"Error: {result.Left.Message}");
 }
 ```
 
-## Core Concepts
+## Building Workflows
 
-### Workflow
+### Basic Operations
 
-A workflow represents a sequence of operations that processes a request and produces either a success result or an error. It's created using the `WorkflowBuilder`.
+#### Validation
 
-### WorkflowBuilder
-
-The builder provides a fluent API for constructing workflows:
+Validates the incoming request before processing begins.
 
 ```csharp
-var workflow = new WorkflowBuilder<TRequest, TPayload, TSuccess, TError>(
-    contextFactory,  // Function that creates the initial payload from the request
-    resultSelector)  // Function that creates the success result from the final payload
-    .Validate(...)   // Add validations
-    .Do(...)         // Add activities
-    .DoIf(...)       // Add conditional activities
-    .Branch(...)     // Add branching logic
-    .BranchWithLocalPayload(...) // Add branch with its own isolated payload type
-    .Finally(...)    // Add finally activities
-    .Build();        // Build the workflow
-```
-
-### Validations
-
-Validations check if the request is valid before processing begins. They return an `Option<TError>`:
-
-```csharp
-.Validate(request =>
-    string.IsNullOrEmpty(request.CustomerId)
-        ? Option<OrderError>.Some(new OrderError("INVALID_CUSTOMER", "Customer ID required"))
-        : Option<OrderError>.None())
-```
-
-### Activities
-
-Activities are the primary building blocks of workflows. They process the payload and return either a success or failure result:
-
-```csharp
-private static Either<OrderError, OrderPayload> ProcessPayment(OrderPayload payload)
+// Asynchronous validation
+.Validate(async (request, cancellationToken) =>
 {
-    // Process payment logic
+    var isValid = await ValidateAsync(request, cancellationToken);
+    return isValid ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
+})
 
-    if (successful)
-    {
-        var updatedPayload = payload with { IsProcessed = true };
-        return Either<OrderError, OrderPayload>.FromRight(updatedPayload);
-    }
-    else
-    {
-        return Either<OrderError, OrderPayload>.FromLeft(
-            new OrderError("PAYMENT_FAILED", "Failed to process payment"));
-    }
-}
+// Synchronous validation
+.Validate(request =>
+{
+    var isValid = Validate(request);
+    return isValid ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
+})
 ```
 
-### Conditional Activities
+#### Activities
 
-Execute activities only when specific conditions are met:
+Activities are the building blocks of a workflow. They process the payload and can produce either a success (with modified payload) or an error.
+
+```csharp
+// Asynchronous activity
+.Do(async (payload, cancellationToken) =>
+{
+    var result = await ProcessAsync(payload, cancellationToken);
+    return Either<ErrorResult, Payload>.FromRight(result);
+})
+
+// Synchronous activity
+.Do(payload =>
+{
+    var result = Process(payload);
+    return Either<ErrorResult, Payload>.FromRight(result);
+})
+
+// Multiple activities
+.DoAll(
+    payload => DoFirstThing(payload),
+    payload => DoSecondThing(payload),
+    payload => DoThirdThing(payload)
+)
+```
+
+#### Conditional Activities
+
+Activities that only execute if a condition is met.
 
 ```csharp
 .DoIf(
-    payload => payload.Request.Amount > 1000,  // Condition
-    ApplyHighValueDiscount)                    // Activity
+    payload => payload.ShouldProcess, // Condition
+    payload =>
+    {
+        // Activity that only executes if the condition is true
+        payload.Data = Process(payload.Data);
+        return Either<ErrorResult, Payload>.FromRight(payload);
+    }
+)
 ```
 
-### Branches
+### Advanced Features
 
-Create branches for more complex conditional logic:
+#### Groups
+
+Organize related activities into logical groups. Groups can have conditions and always merge their results back to the main workflow.
 
 ```csharp
-.Branch(payload => payload.IsExpressShipping)
-    .Do(CalculateExpressShippingFee)
-    .Do(PrioritizeOrder)
-    .EndBranch()
-.Branch(payload => !payload.IsExpressShipping)
-    .Do(CalculateStandardShippingFee)
-    .EndBranch()
+.Group(
+    payload => payload.ShouldProcessGroup, // Optional condition
+    group => group
+        .Do(payload => FirstActivity(payload))
+        .Do(payload => SecondActivity(payload))
+        .Do(payload => ThirdActivity(payload))
+)
 ```
 
-### Branches with Local Payload
+#### Contexts with Local State
 
-Create isolated branches with their own local payload type that doesn't affect the main workflow payload:
+Create a context with local state that is accessible to all activities within the context. This helps encapsulate related operations.
 
 ```csharp
-.BranchWithLocalPayload(
-    // Condition
-    payload => payload.NeedsCustomization,
-
-    // Local payload factory
-    mainPayload => new CustomizationPayload(
-        AvailableOptions: new[] { "Engraving", "Gift Wrap" },
-        SelectedOptions: new string[0],
-        CustomizationCost: 0m
-    ),
-
-    // Branch configuration
-    branch => branch
-        .Do((mainPayload, localPayload) => {
-            // Activity can access and modify both payloads
-            var selectedOption = "Engraving";
-
-            var updatedLocalPayload = localPayload with {
-                SelectedOptions = new[] { selectedOption },
-                CustomizationCost = 10.00m
-            };
-
-            var updatedMainPayload = mainPayload with {
-                FinalPrice = mainPayload.Price + updatedLocalPayload.CustomizationCost
-            };
-
-            return Either<OrderError, (OrderPayload, CustomizationPayload)>.FromRight(
-                (updatedMainPayload, updatedLocalPayload));
+.WithContext(
+    null, // No condition, always execute
+    payload => new LocalState { Counter = 0 }, // Create local state
+    context => context
+        .Do((payload, state) =>
+        {
+            state.Counter++;
+            return (payload, state);
+        })
+        .Do((payload, state) =>
+        {
+            payload.Result = $"Counted to {state.Counter}";
+            return (payload, state);
         })
 )
 ```
 
-### Finally Blocks
+#### Parallel Execution
 
-Activities that execute regardless of workflow success or failure:
+Execute multiple groups of activities in parallel and merge the results.
 
+```csharp
+.Parallel(
+    null, // No condition, always execute
+    parallel => parallel
+        .Group(group => group
+            .Do(payload => { payload.Result1 = "Result 1"; return payload; })
+        )
+        .Group(group => group
+            .Do(payload => { payload.Result2 = "Result 2"; return payload; })
+        )
+)
 ```
 
+#### Detached Execution
+
+Execute activities in the background without waiting for their completion. Results from detached activities are not merged back into the main workflow.
+
+```csharp
+.Detach(
+    null, // No condition, always execute
+    detached => detached
+        .Do(payload =>
+        {
+            // This runs in the background
+            LogActivity(payload);
+            return payload;
+        })
+)
 ```
+
+#### Parallel Detached Execution
+
+Execute multiple groups of detached activities in parallel without waiting for completion.
+
+```csharp
+.ParallelDetached(
+    null, // No condition, always execute
+    parallelDetached => parallelDetached
+        .Detached(detached => detached
+            .Do(payload => { LogActivity1(payload); return payload; })
+        )
+        .Detached(detached => detached
+            .Do(payload => { LogActivity2(payload); return payload; })
+        )
+)
+```
+
+#### Finally Block
+
+Activities that always execute, even if the workflow fails.
+
+```csharp
+.Finally(payload =>
+{
+    // Cleanup or logging
+    CleanupResources(payload);
+    return Either<ErrorResult, Payload>.FromRight(payload);
+})
+```
+
+## Advanced Patterns
+
+### Error Handling
+
+```csharp
+.Do(payload =>
+{
+    try
+    {
+        var result = RiskyOperation(payload);
+        return Either<ErrorResult, Payload>.FromRight(result);
+    }
+    catch (Exception ex)
+    {
+        return Either<ErrorResult, Payload>.FromLeft(new ErrorResult { Message = ex.Message });
+    }
+})
+```
+
+### Conditional Branching
+
+Use conditions to determine which path to take in a workflow.
+
+```csharp
+.Group(
+    payload => payload.Type == "TypeA",
+    group => group
+        .Do(payload => ProcessTypeA(payload))
+)
+.Group(
+    payload => payload.Type == "TypeB",
+    group => group
+        .Do(payload => ProcessTypeB(payload))
+)
+```
+
+## Performance Considerations
+
+- Use `Parallel` for CPU-bound operations that can benefit from parallel execution
+- Use `Detach` for I/O operations that don't affect the main workflow
+- Be mindful of resource contention in parallel operations
+- Consider using `WithContext` to maintain state between related activities
+
+## Best Practices
+
+1. Keep activities small and focused on a single responsibility
+2. Use descriptive names for your workflow methods
+3. Group related activities together
+4. Handle errors at appropriate levels
+5. Use `Finally` for cleanup operations
+6. Validate requests early to fail fast
+7. Use contextual state to avoid passing too many parameters
+
+## License
+
+MIT License (Copyright details here)

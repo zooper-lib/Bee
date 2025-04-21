@@ -1,4 +1,3 @@
-using System;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Xunit;
@@ -33,7 +32,7 @@ public class WorkflowInternalsTests
 		)
 		.Do(payload => Either<TestError, TestPayload>.FromRight(
 			payload with { Result = "Initial processing" }))
-		.BranchWithLocalPayload(
+		.WithContext(
 			// Condition - always true
 			payload => true,
 
@@ -76,7 +75,7 @@ public class WorkflowInternalsTests
 		)
 		.Do(payload => Either<TestError, TestPayload>.FromRight(
 			payload with { Result = "Initial processing" }))
-		.BranchWithLocalPayload(
+		.WithContext(
 			// Condition - always false
 			payload => false,
 
@@ -116,7 +115,7 @@ public class WorkflowInternalsTests
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "No result")
 		)
-		.BranchWithLocalPayload(
+		.WithContext(
 			// Condition - always true
 			payload => true,
 
@@ -152,7 +151,7 @@ public class WorkflowInternalsTests
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "No result")
 		)
-		.BranchWithLocalPayload(
+		.WithContext(
 			// Condition - always true
 			payload => true,
 
@@ -216,7 +215,7 @@ public class WorkflowInternalsTests
 		.Do(payload => Either<TestError, TestPayload>.FromRight(
 			payload with { Result = "Start" }))
 		// First branch with first local payload type
-		.BranchWithLocalPayload(
+		.WithContext(
 			payload => true,
 			payload => new TestLocalPayload("Branch 1 data"),
 			branch => branch
@@ -232,7 +231,7 @@ public class WorkflowInternalsTests
 				})
 		)
 		// Second branch with the same local payload type
-		.BranchWithLocalPayload(
+		.WithContext(
 			payload => payload.Value > 0,
 			payload => new TestLocalPayload("Branch 2 data"),
 			branch => branch

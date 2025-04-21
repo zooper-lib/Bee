@@ -1,74 +1,79 @@
-using System;
-using System.Threading.Tasks;
-using Zooper.Bee;
 using Zooper.Fox;
 
 namespace Zooper.Bee.Example;
 
 public class BranchingExample
 {
-	// Request models
-	public record UserRegistrationRequest(
-		string Username,
+	// Request model
+	public record RegistrationRequest(
 		string Email,
+		string Password,
 		bool IsVipMember);
 
 	// Success model
-	public record RegistrationResult(
-		string Username,
+	public record RegistrationSuccess(
+		Guid UserId,
 		string Email,
-		string AccountType,
-		bool WelcomeEmailSent,
-		bool VipBenefitsActivated);
+		bool IsVipMember,
+		string? WelcomeMessage);
 
 	// Error model
 	public record RegistrationError(string Code, string Message);
 
-	// Payload model
+	// Registration payload model
 	public record RegistrationPayload(
-		string Username,
+		Guid UserId,
 		string Email,
+		string Password,
 		bool IsVipMember,
-		bool IsRegistered = false,
-		bool WelcomeEmailSent = false,
-		bool VipBenefitsActivated = false,
-		string AccountType = "Standard");
+		string? WelcomeMessage = null);
 
 	public static async Task RunExample()
 	{
-		Console.WriteLine("\n=== Workflow Branching Example ===\n");
+		Console.WriteLine("\n=== Workflow Grouping Example ===\n");
 
 		// Create sample requests
-		var standardUser = new UserRegistrationRequest("john_doe", "john@example.com", false);
-		var vipUser = new UserRegistrationRequest("jane_smith", "jane@example.com", true);
+		var standardUserRequest = new RegistrationRequest("user@example.com", "Password123!", false);
+		var vipUserRequest = new RegistrationRequest("vip@example.com", "VIPPassword123!", true);
+		var invalidEmailRequest = new RegistrationRequest("invalid-email", "Password123!", false);
 
 		// Build the registration workflow
 		var workflow = CreateRegistrationWorkflow();
 
-		// Process the standard user
-		Console.WriteLine("Processing standard user registration:");
-		await ProcessRegistration(workflow, standardUser);
+		// Process standard user registration
+		Console.WriteLine("Registering standard user:");
+		await ProcessRegistration(workflow, standardUserRequest);
 
 		Console.WriteLine();
 
-		// Process the VIP user
-		Console.WriteLine("Processing VIP user registration:");
-		await ProcessRegistration(workflow, vipUser);
+		// Process VIP user registration
+		Console.WriteLine("Registering VIP user:");
+		await ProcessRegistration(workflow, vipUserRequest);
+
+		Console.WriteLine();
+
+		// Process invalid registration
+		Console.WriteLine("Attempting to register user with invalid email:");
+		await ProcessRegistration(workflow, invalidEmailRequest);
 	}
 
 	private static async Task ProcessRegistration(
-		Workflow<UserRegistrationRequest, RegistrationResult, RegistrationError> workflow,
-		UserRegistrationRequest request)
+		Workflow<RegistrationRequest, RegistrationSuccess, RegistrationError> workflow,
+		RegistrationRequest request)
 	{
 		var result = await workflow.Execute(request);
 
 		if (result.IsRight)
 		{
-			var registration = result.Right;
-			Console.WriteLine($"Registration successful for {registration.Username}");
-			Console.WriteLine($"Account Type: {registration.AccountType}");
-			Console.WriteLine($"Welcome Email Sent: {registration.WelcomeEmailSent}");
-			Console.WriteLine($"VIP Benefits Activated: {registration.VipBenefitsActivated}");
+			var success = result.Right;
+			Console.WriteLine($"Registration successful for {success.Email}");
+			Console.WriteLine($"User ID: {success.UserId}");
+			Console.WriteLine($"VIP Member: {success.IsVipMember}");
+
+			if (success.WelcomeMessage != null)
+			{
+				Console.WriteLine($"Welcome message: {success.WelcomeMessage}");
+			}
 		}
 		else
 		{
@@ -77,22 +82,22 @@ public class BranchingExample
 		}
 	}
 
-	private static Workflow<UserRegistrationRequest, RegistrationResult, RegistrationError> CreateRegistrationWorkflow()
+	private static Workflow<RegistrationRequest, RegistrationSuccess, RegistrationError> CreateRegistrationWorkflow()
 	{
-		return new WorkflowBuilder<UserRegistrationRequest, RegistrationPayload, RegistrationResult, RegistrationError>(
+		return new WorkflowBuilder<RegistrationRequest, RegistrationPayload, RegistrationSuccess, RegistrationError>(
 			// Create initial payload from request
 			request => new RegistrationPayload(
-				request.Username,
+				Guid.NewGuid(),  // Generate a new unique ID
 				request.Email,
+				request.Password,
 				request.IsVipMember),
 
 			// Create result from final payload
-			payload => new RegistrationResult(
-				payload.Username,
+			payload => new RegistrationSuccess(
+				payload.UserId,
 				payload.Email,
-				payload.AccountType,
-				payload.WelcomeEmailSent,
-				payload.VipBenefitsActivated)
+				payload.IsVipMember,
+				payload.WelcomeMessage)
 		)
 		// Validate email format
 		.Validate(request =>
@@ -100,7 +105,7 @@ public class BranchingExample
 			if (!request.Email.Contains('@'))
 			{
 				return Option<RegistrationError>.Some(
-					new RegistrationError("INVALID_EMAIL", "Email address is not in a valid format"));
+					new RegistrationError("INVALID_EMAIL", "Email must contain @ symbol"));
 			}
 
 			return Option<RegistrationError>.None();
@@ -108,58 +113,53 @@ public class BranchingExample
 		// Register the user
 		.Do(payload =>
 		{
-			Console.WriteLine($"Registering user {payload.Username}...");
+			Console.WriteLine($"Registering user with email: {payload.Email}");
 
-			// Simulate registration
-			return Either<RegistrationError, RegistrationPayload>.FromRight(
-				payload with { IsRegistered = true });
+			// In a real app, this would save the user to a database
+			return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
 		})
-		// Branch the workflow based on membership type
-		.Branch(
+		// Conditional group for VIP members
+		.Group(
+			// Condition: only execute for VIP members
 			payload => payload.IsVipMember,
-			branch => branch
+
+			// Configure the group with VIP-specific activities
+			group => group
 				.Do(payload =>
 				{
 					Console.WriteLine("Activating VIP benefits...");
 
+					// In a real app, this would activate VIP-specific features
+					return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
+				})
+				.Do(payload =>
+				{
+					Console.WriteLine("Sending VIP welcome package notification...");
+
+					// Update the welcome message for VIP users
 					return Either<RegistrationError, RegistrationPayload>.FromRight(
-						payload with
-						{
-							VipBenefitsActivated = true,
-							AccountType = "VIP"
-						});
-				})
-				.Do(payload =>
-				{
-					Console.WriteLine("Setting up premium support access...");
-
-					return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
-				})
-		)
-		// Branch for standard users
-		.Branch(
-			payload => !payload.IsVipMember,
-			branch => branch
-				.Do(payload =>
-				{
-					Console.WriteLine("Setting up standard account features...");
-
-					return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
+						payload with { WelcomeMessage = "Welcome to our VIP program! Your welcome package is on the way." });
 				})
 		)
 		// Send welcome email to all users
 		.Do(payload =>
 		{
-			Console.WriteLine($"Sending welcome email to {payload.Email}...");
+			Console.WriteLine($"Sending welcome email to: {payload.Email}");
 
-			// Simulate sending email
-			return Either<RegistrationError, RegistrationPayload>.FromRight(
-				payload with { WelcomeEmailSent = true });
+			// Only set a default welcome message if one hasn't been set (for non-VIP users)
+			if (payload.WelcomeMessage == null)
+			{
+				payload = payload with { WelcomeMessage = "Welcome to our platform!" };
+			}
+
+			return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
 		})
-		// Finally log the registration
+		// Log the registration
 		.Finally(payload =>
 		{
-			Console.WriteLine($"Logging registration of {payload.Username} ({payload.AccountType} account)");
+			Console.WriteLine($"Logging registration for user: {payload.Email} (ID: {payload.UserId})");
+
+			// Return the unmodified payload to satisfy the lambda return type
 			return Either<RegistrationError, RegistrationPayload>.FromRight(payload);
 		})
 		.Build();
