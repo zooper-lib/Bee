@@ -1,6 +1,3 @@
-using System;
-using System.Threading.Tasks;
-using Zooper.Bee;
 using Zooper.Fox;
 
 namespace Zooper.Bee.Example;

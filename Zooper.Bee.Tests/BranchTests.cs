@@ -1,4 +1,3 @@
-using System;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Xunit;
@@ -37,7 +36,7 @@ public class BranchTests
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
 		.Do(payload => Either<TestError, TestPayload>.FromRight(payload))
-		.Branch(
+		.Group(
 			// Condition: Category is Premium
 			payload => payload.Category == "Premium",
 			branch => branch
@@ -51,7 +50,7 @@ public class BranchTests
 					return Either<TestError, TestPayload>.FromRight(processed);
 				})
 		)
-		.Branch(
+		.Group(
 			// Condition: Category is Standard
 			payload => payload.Category == "Standard",
 			branch => branch
@@ -92,7 +91,7 @@ public class BranchTests
 		)
 		.Do(payload => Either<TestError, TestPayload>.FromRight(
 			payload with { ProcessingResult = "Initial Processing" }))
-		.Branch(
+		.Group(
 			// Condition: Category is Premium and Value is over 1000
 			payload => payload.Category == "Premium" && payload.Value > 1000,
 			branch => branch
@@ -122,7 +121,7 @@ public class BranchTests
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
-		.Branch(
+		.Group(
 			branch => branch
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
 					payload with { ProcessingResult = "Always Processed" }))
@@ -149,21 +148,21 @@ public class BranchTests
 		)
 		.Do(payload => Either<TestError, TestPayload>.FromRight(
 			payload with { ProcessingResult = "Initial" }))
-		.Branch(
+		.Group(
 			// First branch - based on Category
 			payload => payload.Category == "Premium",
 			branch => branch
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
 					payload with { ProcessingResult = payload.ProcessingResult + " + Premium" }))
 		)
-		.Branch(
+		.Group(
 			// Second branch - based on Value
 			payload => payload.Value > 75,
 			branch => branch
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
 					payload with { ProcessingResult = payload.ProcessingResult + " + High Value" }))
 		)
-		.Branch(
+		.Group(
 			// Third branch - always executes
 			branch => branch
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
@@ -190,7 +189,7 @@ public class BranchTests
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
-		.Branch(
+		.Group(
 			payload => payload.Category == "Premium",
 			branch => branch
 				.Do(payload =>
@@ -204,7 +203,7 @@ public class BranchTests
 						payload with { ProcessingResult = "Premium Processing" });
 				})
 		)
-		.Branch(
+		.Group(
 			branch => branch
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
 					payload with { ProcessingResult = "Final Processing" }))
@@ -230,7 +229,7 @@ public class BranchTests
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
-		.Branch(
+		.Group(
 			payload => true,
 			branch => branch
 				.Do(payload => Either<TestError, TestPayload>.FromRight(

@@ -6,7 +6,7 @@ using Zooper.Fox;
 
 namespace Zooper.Bee.Tests;
 
-public class BranchWithLocalPayloadTests
+public class ContextTests
 {
 	#region Test Models
 	// Request model
@@ -39,7 +39,7 @@ public class BranchWithLocalPayloadTests
 	#endregion
 
 	[Fact]
-	public async Task BranchWithLocalPayload_ExecutesWhenConditionIsTrue()
+	public async Task WithContext_ExecutesWhenConditionIsTrue()
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
@@ -119,7 +119,7 @@ public class BranchWithLocalPayloadTests
 	}
 
 	[Fact]
-	public async Task BranchWithLocalPayload_LocalPayloadIsolated_NotAffectedByOtherActivities()
+	public async Task WithContext_LocalPayloadIsolated_NotAffectedByOtherActivities()
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
@@ -201,7 +201,7 @@ public class BranchWithLocalPayloadTests
 	}
 
 	[Fact]
-	public async Task BranchWithLocalPayload_ErrorInBranch_StopsExecutionAndReturnsError()
+	public async Task WithContext_ErrorInBranch_StopsExecutionAndReturnsError()
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
@@ -264,7 +264,7 @@ public class BranchWithLocalPayloadTests
 	}
 
 	[Fact]
-	public async Task BranchWithLocalPayload_MultipleActivitiesInSameBranch_ShareLocalPayload()
+	public async Task WithContext_MultipleActivitiesInSameBranch_ShareLocalPayload()
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
@@ -355,7 +355,7 @@ public class BranchWithLocalPayloadTests
 	}
 
 	[Fact]
-	public async Task BranchWithLocalPayload_UnconditionalBranch_AlwaysExecutes()
+	public async Task WithContext_UnconditionalBranch_AlwaysExecutes()
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(

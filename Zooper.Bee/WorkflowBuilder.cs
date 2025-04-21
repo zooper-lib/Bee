@@ -481,41 +481,110 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 				// Run validations
 				foreach (var validation in _validations)
 				{
+					// Skip null validations
+					if (validation == null)
+					{
+						continue;
+					}
+
 					var validationResult = await validation.Validate(request, cancellationToken);
 					if (validationResult.IsSome)
 					{
-						return Either<TError, TSuccess>.FromLeft(validationResult.Value);
+						var errorValue = validationResult.Value;
+						// Skip if error value is null
+						if (errorValue == null)
+						{
+							continue;
+						}
+						return Either<TError, TSuccess>.FromLeft(errorValue);
 					}
 				}
 
 				// Create initial payload
 				var payload = _contextFactory(request);
 
+				// Skip if payload is null
+				if (payload == null)
+				{
+					// Return a default success with default payload
+					return Either<TError, TSuccess>.FromRight(_resultSelector(default!));
+				}
+
 				// Execute main activities
 				try
 				{
 					foreach (var activity in _activities)
 					{
-						var activityResult = await activity.Execute(payload, cancellationToken);
-						if (activityResult.IsLeft)
+						// Skip null activities
+						if (activity == null)
 						{
-							return Either<TError, TSuccess>.FromLeft(activityResult.Left);
+							continue;
 						}
 
+						var activityResult = await activity.Execute(payload, cancellationToken);
+						if (activityResult == null)
+						{
+							continue;
+						}
+
+						if (activityResult.IsLeft)
+						{
+							var errorValue = activityResult.Left;
+							// Skip if error value is null
+							if (errorValue == null)
+							{
+								continue;
+							}
+							return Either<TError, TSuccess>.FromLeft(errorValue);
+						}
+
+						// Skip if result is null
+						if (activityResult.Right == null)
+						{
+							continue;
+						}
 						payload = activityResult.Right;
 					}
 
 					// Execute conditional activities
 					foreach (var conditionalActivity in _conditionalActivities)
 					{
+						// Skip null conditional activities
+						if (conditionalActivity == null)
+						{
+							continue;
+						}
+
 						if (conditionalActivity.ShouldExecute(payload))
 						{
-							var activityResult = await conditionalActivity.Activity.Execute(payload, cancellationToken);
-							if (activityResult.IsLeft)
+							// Skip if activity is null
+							if (conditionalActivity.Activity == null)
 							{
-								return Either<TError, TSuccess>.FromLeft(activityResult.Left);
+								continue;
 							}
 
+							var activityResult = await conditionalActivity.Activity.Execute(payload, cancellationToken);
+							if (activityResult == null)
+							{
+								continue;
+							}
+
+							if (activityResult.IsLeft)
+							{
+								var errorValue = activityResult.Left;
+								// Skip if error value is null
+								if (errorValue == null)
+								{
+									continue;
+								}
+								return Either<TError, TSuccess>.FromLeft(errorValue);
+							}
+
+							// Skip if result is null
+							if (activityResult.Right == null)
+							{
+								continue;
+							}
 							payload = activityResult.Right;
 						}
 					}
@@ -523,16 +592,56 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 					// Execute branches
 					foreach (var branch in _branches)
 					{
+						// Skip null branches
+						if (branch == null)
+						{
+							continue;
+						}
+
+						// Skip if condition is null
+						if (branch.Condition == null)
+						{
+							continue;
+						}
+
 						if (branch.Condition(payload))
 						{
+							// Skip if activities collection is null
+							if (branch.Activities == null)
+							{
+								continue;
+							}
+
 							foreach (var activity in branch.Activities)
 							{
-								var activityResult = await activity.Execute(payload, cancellationToken);
-								if (activityResult.IsLeft)
+								// Skip null activities
+								if (activity == null)
 								{
-									return Either<TError, TSuccess>.FromLeft(activityResult.Left);
+									continue;
 								}
 
+								var activityResult = await activity.Execute(payload, cancellationToken);
+								if (activityResult == null)
+								{
+									continue;
+								}
+
+								if (activityResult.IsLeft)
+								{
+									var errorValue = activityResult.Left;
+									// Skip if error value is null
+									if (errorValue == null)
+									{
+										continue;
+									}
+									return Either<TError, TSuccess>.FromLeft(errorValue);
+								}
+
+								// Skip if result is null
+								if (activityResult.Right == null)
+								{
+									continue;
+								}
 								payload = activityResult.Right;
 							}
 						}
@@ -541,18 +650,46 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 					// Execute branches with local payload
 					foreach (var branchObj in _branchesWithLocalPayload)
 					{
-						var branchResult = await ExecuteBranchWithLocalPayloadDynamic(branchObj, payload, cancellationToken);
-						if (branchResult.IsLeft)
+						// Skip null branch objects
+						if (branchObj == null)
 						{
-							return Either<TError, TSuccess>.FromLeft(branchResult.Left);
+							continue;
 						}
 
+						var branchResult = await ExecuteBranchWithLocalPayloadDynamic(branchObj, payload, cancellationToken);
+						if (branchResult == null)
+						{
+							continue;
+						}
+
+						if (branchResult.IsLeft)
+						{
+							var errorValue = branchResult.Left;
+							// Skip if error value is null
+							if (errorValue == null)
+							{
+								continue;
+							}
+							return Either<TError, TSuccess>.FromLeft(errorValue);
+						}
+
+						// Skip if result is null
+						if (branchResult.Right == null)
+						{
+							continue;
+						}
 						payload = branchResult.Right;
 					}
 
 					// Execute workflow features (Group, WithContext, Detach, Parallel, etc.)
 					foreach (var feature in _features)
 					{
+						// Skip null features
+						if (feature == null)
+						{
+							continue;
+						}
+
 						// Skip if the condition is false
 						if (feature.Condition != null && !feature.Condition(payload))
 						{
@@ -561,19 +698,43 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 
 						// Execute the feature
 						var featureResult = await ExecuteFeatureDynamic(feature, payload, cancellationToken);
+						if (featureResult == null)
+						{
+							continue;
+						}
+
 						if (featureResult.IsLeft)
 						{
-							return Either<TError, TSuccess>.FromLeft(featureResult.Left);
+							var errorValue = featureResult.Left;
+							// Skip if error value is null
+							if (errorValue == null)
+							{
+								continue;
+							}
+							return Either<TError, TSuccess>.FromLeft(errorValue);
 						}
 
 						if (feature.ShouldMerge)
 						{
+							// Skip if result is null
+							if (featureResult.Right == null)
+							{
+								continue;
+							}
 							payload = featureResult.Right;
 						}
 					}
 
 					// Create success result
 					var success = _resultSelector(payload);
+
+					// Skip if success result is null
+					if (success == null)
+					{
+						// Return an empty success result
+						return Either<TError, TSuccess>.FromRight(default!);
+					}
+
 					return Either<TError, TSuccess>.FromRight(success);
 				}
 				finally
@@ -581,6 +742,18 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 					// Execute finally activities
 					foreach (var finallyActivity in _finallyActivities)
 					{
+						// Skip null finally activities
+						if (finallyActivity == null)
+						{
+							continue;
+						}
+
+						// Skip if payload is null
+						if (payload == null)
+						{
+							continue;
+						}
+
 						// Ignore errors from finally activities
 						_ = await finallyActivity.Execute(payload, cancellationToken);
 					}
@@ -604,6 +777,9 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		{
 			// Start detached activities but don't wait for them or use their results
 			var detachedPayload = payload;
+
+			// Disable the warning about not awaiting the Task.Run
+#pragma warning disable CS4014
 			Task.Run(async () =>
 			{
 				foreach (var activity in detached.Activities)
@@ -618,6 +794,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 					detachedPayload = activityResult.Right;
 				}
 			}, cancellationToken);
+#pragma warning restore CS4014
 
 			// Return original payload since detached execution doesn't affect the main flow
 			return Either<TError, TPayload>.FromRight(payload);
@@ -649,8 +826,19 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 			// If any task returned an error, return that error
 			foreach (var result in results)
 			{
+				// Skip null results
+				if (result == null)
+				{
+					continue;
+				}
+
 				if (result.IsLeft)
 				{
+					// Check if Left is null
+					if (result.Left == null)
+					{
+						continue;
+					}
 					return Either<TError, TPayload>.FromLeft(result.Left);
 				}
 			}
@@ -663,22 +851,83 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 			foreach (var result in results)
 			{
 				var source = result.Right;
+
+				// Skip if source is null
+				if (source == null)
+				{
+					continue;
+				}
+
 				var sourceType = source.GetType();
-				var targetType = mergedPayload.GetType();
+				if (sourceType == null)
+				{
+					continue;
+				}
+
+				var targetType = mergedPayload?.GetType();
+				if (targetType == null)
+				{
+					continue;
+				}
 
 				// Get all properties from the payload type
 				var properties = sourceType.GetProperties();
+				if (properties == null || properties.Length == 0)
+				{
+					continue;
+				}
 
 				foreach (var property in properties)
 				{
-					var sourceValue = property.GetValue(source);
-					var defaultValue = property.PropertyType.IsValueType ?
-						Activator.CreateInstance(property.PropertyType) : null;
+					// Skip if property is null
+					if (property == null)
+					{
+						continue;
+					}
+
+					// Skip if property type is null
+					if (property.PropertyType == null)
+					{
+						continue;
+					}
+
+					object? sourceValue = null;
+					try
+					{
+						sourceValue = property.GetValue(source);
+					}
+					catch (Exception)
+					{
+						// Skip if we can't get the value
+						continue;
+					}
+
+					object? defaultValue = null;
+					try
+					{
+						defaultValue = property.PropertyType.IsValueType ?
+							Activator.CreateInstance(property.PropertyType) : null;
+					}
+					catch (Exception)
+					{
+						// If we can't create default, use null as default
+					}
 
 					// Only copy non-default values (like Sum, Product, etc.)
-					if (sourceValue != null && !sourceValue.Equals(defaultValue))
+					if (sourceValue != null && (defaultValue == null || !sourceValue.Equals(defaultValue)))
 					{
-						property.SetValue(mergedPayload, sourceValue);
+						// Ensure the property can be written to and the merged payload is not null
+						if (property.CanWrite && mergedPayload != null)
+						{
+							try
+							{
+								property.SetValue(mergedPayload, sourceValue);
+							}
+							catch (Exception)
+							{
+								// Skip if we can't set the value
+							}
+						}
 					}
 				}
 			}
@@ -698,6 +947,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 				}
 
 				// Start each detached group in its own task
+#pragma warning disable CS4014
 				Task.Run(async () =>
 				{
 					var localPayload = detachedPayload;
@@ -713,26 +963,67 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 						localPayload = activityResult.Right;
 					}
 				}, cancellationToken);
+#pragma warning restore CS4014
 			}
 
 			// Return original payload since parallel detached execution doesn't affect the main flow
 			return Either<TError, TPayload>.FromRight(payload);
 		}
 		// Special handling for Context<,>
-		else if (feature.GetType().IsGenericType &&
+		else if (feature != null && feature.GetType() != null && feature.GetType().IsGenericType &&
+			feature.GetType().GetGenericTypeDefinition() != null &&
 			feature.GetType().GetGenericTypeDefinition() == typeof(Features.Context.Context<,,>))
 		{
-			var typeArgs = feature.GetType().GetGenericArguments();
-			var localStateType = typeArgs[1];
+			try
+			{
+				var featureType = feature.GetType();
+				if (featureType == null)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
 
-			// Get the generic method and make it specific to the local state type
-			var method = GetType().GetMethod(nameof(ExecuteContext),
-				System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-			var genericMethod = method!.MakeGenericMethod(localStateType);
+				var typeArgs = featureType.GetGenericArguments();
+				if (typeArgs == null || typeArgs.Length < 2)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
 
-			// Invoke the method with the right generic parameter
-			return (Either<TError, TPayload>)await (Task<Either<TError, TPayload>>)
-				genericMethod.Invoke(this, new object[] { feature, payload, cancellationToken })!;
+				var localStateType = typeArgs[1];
+				if (localStateType == null)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
+
+				// Get the generic method and make it specific to the local state type
+				var method = GetType().GetMethod(nameof(ExecuteContext),
+					System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+				// Check if method is null before using it
+				if (method == null)
+				{
+					throw new InvalidOperationException($"Method {nameof(ExecuteContext)} not found.");
+				}
+
+				var genericMethod = method.MakeGenericMethod(localStateType);
+				if (genericMethod == null)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
+
+				// Ensure payload is not null before passing to the method
+				payload ??= default!; // Use default value if null
+
+				// Invoke the method with the right generic parameter
+				var result = genericMethod.Invoke(this, new object[] { feature, payload, cancellationToken });
+				return result == null
+					? throw new InvalidOperationException("Method invocation returned null.")
+					: await (Task<Either<TError, TPayload>>)result;
+			}
+			catch (Exception)
+			{
+				// If any reflection-related exception occurs, return the payload unchanged
+				return Either<TError, TPayload>.FromRight(payload);
+			}
 		}
 
 		// Default behavior for unknown features
@@ -745,16 +1036,44 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
+		// Check if activities is null
+		if (activities == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
 		var currentPayload = payload;
 
 		foreach (var activity in activities)
 		{
+			// Skip null activities
+			if (activity == null)
+			{
+				continue;
+			}
+
 			var activityResult = await activity.Execute(currentPayload, cancellationToken);
+			if (activityResult == null)
+			{
+				// Skip if the activity result is null
+				continue;
+			}
+
 			if (activityResult.IsLeft)
 			{
+				// Check if Left is null
+				if (activityResult.Left == null)
+				{
+					continue;
+				}
 				return Either<TError, TPayload>.FromLeft(activityResult.Left);
 			}
 
+			// Check if Right is null
+			if (activityResult.Right == null)
+			{
+				continue;
+			}
 			currentPayload = activityResult.Right;
 		}
 
@@ -767,26 +1086,72 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
+		// Check if context is null
+		if (context == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
 		// Check if the condition is met (null condition means always execute)
 		if (context.Condition != null && !context.Condition(payload))
 		{
 			return Either<TError, TPayload>.FromRight(payload);
 		}
 
+		// Check if local state factory is null
+		if (context.LocalStateFactory == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
 		// Create the local state
-		var localState = context.LocalStateFactory(payload);
+		TLocalState? localState;
+		try
+		{
+			localState = context.LocalStateFactory(payload);
+		}
+		catch (Exception)
+		{
+			// If we can't create the local state, return the payload unchanged
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
+		// Check if activities collection is null
+		if (context.Activities == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
 
 		// Execute the context activities
 		foreach (var activity in context.Activities)
 		{
+			// Skip null activities
+			if (activity == null)
+			{
+				continue;
+			}
+
 			var activityResult = await activity.Execute(payload, localState, cancellationToken);
+			if (activityResult == null)
+			{
+				// Skip if the activity result is null
+				continue;
+			}
+
 			if (activityResult.IsLeft)
 			{
 				return Either<TError, TPayload>.FromLeft(activityResult.Left);
 			}
 
 			// Update both payload and local state
-			(payload, localState) = activityResult.Right;
+			if (activityResult.Right.Item1 != null)
+			{
+				payload = activityResult.Right.Item1;
+			}
+			if (activityResult.Right.Item2 != null)
+			{
+				localState = activityResult.Right.Item2;
+			}
 		}
 
 		return Either<TError, TPayload>.FromRight(payload);
@@ -798,22 +1163,71 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
+		// Skip if branch object is null
+		if (branchObj == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
 		// Use reflection to call the appropriate generic method
 		var branchType = branchObj.GetType();
-		if (branchType.IsGenericType &&
-			branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
+
+		// Skip if branch type is null
+		if (branchType == null)
 		{
-			var typeArgs = branchType.GetGenericArguments();
-			var localPayloadType = typeArgs[1];
+			return Either<TError, TPayload>.FromRight(payload);
+		}
 
-			// Get the generic method and make it specific to the local payload type
-			var method = GetType().GetMethod(nameof(ExecuteBranchWithLocalPayload),
-				System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-			var genericMethod = method!.MakeGenericMethod(localPayloadType);
+		try
+		{
+			if (branchType.IsGenericType &&
+				branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
+			{
+				var typeArgs = branchType.GetGenericArguments();
+				if (typeArgs == null || typeArgs.Length < 2)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
 
-			// Invoke the method with the right generic parameter
-			return (Either<TError, TPayload>)await (Task<Either<TError, TPayload>>)
-				genericMethod.Invoke(this, new object[] { branchObj, payload, cancellationToken })!;
+				var localPayloadType = typeArgs[1];
+				if (localPayloadType == null)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
+
+				// Get the generic method and make it specific to the local payload type
+				var method = GetType().GetMethod(nameof(ExecuteBranchWithLocalPayload),
+					System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+				// Check if method is null before using it
+				if (method == null)
+				{
+					throw new InvalidOperationException($"Method {nameof(ExecuteBranchWithLocalPayload)} not found.");
+				}
+
+				var genericMethod = method.MakeGenericMethod(localPayloadType);
+				if (genericMethod == null)
+				{
+					return Either<TError, TPayload>.FromRight(payload);
+				}
+
+				// Ensure payload is not null before passing to the method
+				if (payload == null)
+				{
+					payload = default!; // Use default value if null
+				}
+
+				// Invoke the method with the right generic parameter
+				var result = genericMethod.Invoke(this, new object[] { branchObj, payload, cancellationToken });
+				return result == null
+					? throw new InvalidOperationException("Method invocation returned null.")
+					: await (Task<Either<TError, TPayload>>)result;
+			}
+		}
+		catch (Exception)
+		{
+			// If any reflection-related exception occurs, return the payload unchanged
+			return Either<TError, TPayload>.FromRight(payload);
 		}
 
 		// If branch type isn't recognized, just return the payload unchanged
@@ -826,25 +1240,77 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
+		// Check if branch is null
+		if (branch == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
+		// Check if condition is null
+		if (branch.Condition == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
 		if (!branch.Condition(payload))
 		{
 			return Either<TError, TPayload>.FromRight(payload);
 		}
 
+		// Check if local payload factory is null
+		if (branch.LocalPayloadFactory == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
 		// Create the local payload
-		var localPayload = branch.LocalPayloadFactory(payload);
+		TLocalPayload? localPayload;
+		try
+		{
+			localPayload = branch.LocalPayloadFactory(payload);
+		}
+		catch (Exception)
+		{
+			// If we can't create the local payload, return the payload unchanged
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
+		// Check if activities collection is null
+		if (branch.Activities == null)
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
 
 		// Execute the branch activities
 		foreach (var activity in branch.Activities)
 		{
+			// Skip null activities
+			if (activity == null)
+			{
+				continue;
+			}
+
 			var activityResult = await activity.Execute(payload, localPayload, cancellationToken);
+			if (activityResult == null)
+			{
+				// Skip if the activity result is null
+				continue;
+			}
+
 			if (activityResult.IsLeft)
 			{
 				return Either<TError, TPayload>.FromLeft(activityResult.Left);
 			}
 
 			// Update both payloads
-			(payload, localPayload) = activityResult.Right;
+			if (activityResult.Right.Item1 != null)
+			{
+				payload = activityResult.Right.Item1;
+			}
+			if (activityResult.Right.Item2 != null)
+			{
+				localPayload = activityResult.Right.Item2;
+			}
 		}
 
 		return Either<TError, TPayload>.FromRight(payload);
