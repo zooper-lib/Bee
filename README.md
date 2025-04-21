@@ -14,6 +14,7 @@ Zooper.Bee is a fluent, lightweight workflow framework for C# that enables you t
 - **Functional Style**: Uses an Either monad pattern for clear success/failure handling
 - **Composable**: Build complex workflows from simple, reusable components
 - **Comprehensive**: Support for validations, conditional activities, branches, and finally blocks
+- **Isolated Branches**: Create branches with their own isolated local payload types
 - **Async-first**: First-class support for async/await operations
 - **Testable**: Workflows built with Zooper.Bee are easy to unit test
 - **No Dependencies**: Minimal external dependencies (only uses Zooper.Fox)
@@ -97,6 +98,7 @@ var workflow = new WorkflowBuilder<TRequest, TPayload, TSuccess, TError>(
     .Do(...)         // Add activities
     .DoIf(...)       // Add conditional activities
     .Branch(...)     // Add branching logic
+    .BranchWithLocalPayload(...) // Add branch with its own isolated payload type
     .Finally(...)    // Add finally activities
     .Build();        // Build the workflow
 ```
@@ -158,77 +160,47 @@ Create branches for more complex conditional logic:
     .EndBranch()
 ```
 
+### Branches with Local Payload
+
+Create isolated branches with their own local payload type that doesn't affect the main workflow payload:
+
+```csharp
+.BranchWithLocalPayload(
+    // Condition
+    payload => payload.NeedsCustomization,
+
+    // Local payload factory
+    mainPayload => new CustomizationPayload(
+        AvailableOptions: new[] { "Engraving", "Gift Wrap" },
+        SelectedOptions: new string[0],
+        CustomizationCost: 0m
+    ),
+
+    // Branch configuration
+    branch => branch
+        .Do((mainPayload, localPayload) => {
+            // Activity can access and modify both payloads
+            var selectedOption = "Engraving";
+
+            var updatedLocalPayload = localPayload with {
+                SelectedOptions = new[] { selectedOption },
+                CustomizationCost = 10.00m
+            };
+
+            var updatedMainPayload = mainPayload with {
+                FinalPrice = mainPayload.Price + updatedLocalPayload.CustomizationCost
+            };
+
+            return Either<OrderError, (OrderPayload, CustomizationPayload)>.FromRight(
+                (updatedMainPayload, updatedLocalPayload));
+        })
+)
+```
+
 ### Finally Blocks
 
 Activities that execute regardless of workflow success or failure:
 
-```csharp
-.Finally(LogOrderProcessing)
 ```
 
-## Advanced Usage
-
-### Asynchronous Operations
-
-Zooper.Bee has first-class support for async operations:
-
-```csharp
-private static async Task<Either<OrderError, OrderPayload>> ProcessPaymentAsync(
-    OrderPayload payload, CancellationToken cancellationToken)
-{
-    var result = await paymentService.AuthorizePaymentAsync(
-        payload.Request.Amount,
-        cancellationToken);
-
-    if (result.Success)
-    {
-        var updatedPayload = payload with { IsProcessed = true };
-        return Either<OrderError, OrderPayload>.FromRight(updatedPayload);
-    }
-    else
-    {
-        return Either<OrderError, OrderPayload>.FromLeft(
-            new OrderError("PAYMENT_FAILED", result.ErrorMessage));
-    }
-}
 ```
-
-### Composition
-
-Workflows can be composed by calling one workflow from another:
-
-```csharp
-private static async Task<Either<OrderError, OrderPayload>> RunSubWorkflow(
-    OrderPayload payload, CancellationToken cancellationToken)
-{
-    var subWorkflow = CreateSubWorkflow();
-    var result = await subWorkflow.Execute(payload.SubRequest, cancellationToken);
-
-    return result.Match(
-        error => Either<OrderError, OrderPayload>.FromLeft(error),
-        success => Either<OrderError, OrderPayload>.FromRight(
-            payload with { SubResult = success })
-    );
-}
-```
-
-## Examples
-
-Check out the [Zooper.Bee.Examples](./Zooper.Bee.Examples) project for comprehensive examples including:
-
-- Order processing workflow
-- Different execution patterns
-- Complex branching logic
-- Error handling scenarios
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Related Projects
-
-- [Zooper.Fox](https://github.com/zooper/fox) - Functional programming primitives used by Zooper.Bee
