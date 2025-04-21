@@ -13,7 +13,7 @@ namespace Zooper.Bee.Internal.Executors;
 internal class ParallelDetachedExecutor<TPayload, TError> : FeatureExecutorBase<TPayload, TError, ParallelDetached<TPayload, TError>>
 {
 	/// <inheritdoc />
-	protected override async Task<Either<TError, TPayload>> ExecuteTyped(
+	protected override Task<Either<TError, TPayload>> ExecuteTyped(
 		ParallelDetached<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
@@ -24,7 +24,7 @@ internal class ParallelDetachedExecutor<TPayload, TError> : FeatureExecutorBase<
 		// Check if detached groups collection is null
 		if (feature.DetachedGroups == null)
 		{
-			return Either<TError, TPayload>.FromRight(payload);
+			return Task.FromResult(Either<TError, TPayload>.FromRight(payload));
 		}
 
 		foreach (var detachedGroup in feature.DetachedGroups)
@@ -76,6 +76,6 @@ internal class ParallelDetachedExecutor<TPayload, TError> : FeatureExecutorBase<
 		}
 
 		// Return original payload since parallel detached execution doesn't affect the main flow
-		return Either<TError, TPayload>.FromRight(payload);
+		return Task.FromResult(Either<TError, TPayload>.FromRight(payload));
 	}
 }

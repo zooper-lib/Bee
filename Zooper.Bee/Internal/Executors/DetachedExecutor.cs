@@ -13,7 +13,7 @@ namespace Zooper.Bee.Internal.Executors;
 internal class DetachedExecutor<TPayload, TError> : FeatureExecutorBase<TPayload, TError, Detached<TPayload, TError>>
 {
 	/// <inheritdoc />
-	protected override async Task<Either<TError, TPayload>> ExecuteTyped(
+	protected override Task<Either<TError, TPayload>> ExecuteTyped(
 		Detached<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
@@ -24,7 +24,7 @@ internal class DetachedExecutor<TPayload, TError> : FeatureExecutorBase<TPayload
 		// Check if activities collection is null
 		if (feature.Activities == null)
 		{
-			return Either<TError, TPayload>.FromRight(payload);
+			return Task.FromResult(Either<TError, TPayload>.FromRight(payload));
 		}
 
 		// Disable the warning about not awaiting the Task.Run
@@ -60,6 +60,6 @@ internal class DetachedExecutor<TPayload, TError> : FeatureExecutorBase<TPayload
 #pragma warning restore CS4014
 
 		// Return original payload since detached execution doesn't affect the main flow
-		return Either<TError, TPayload>.FromRight(payload);
+		return Task.FromResult(Either<TError, TPayload>.FromRight(payload));
 	}
 }
