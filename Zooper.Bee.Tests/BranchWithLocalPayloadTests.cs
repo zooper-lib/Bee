@@ -408,4 +408,50 @@ public class BranchWithLocalPayloadTests
 		result.Right.ProcessingResult.Should().Be("Processed with default customization");
 		result.Right.CustomizationDetails.Should().Be("Default customization");
 	}
+
+	[Fact]
+	public async Task BranchWithLocalPayload_UnconditionalBranchFluentApi_AlwaysExecutes()
+	{
+		// Arrange
+		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
+			payload => new ProductResult(
+				payload.Id, payload.Name, payload.FinalPrice,
+				payload.ProcessingResult, payload.CustomizationDetails)
+		)
+		.BranchWithLocalPayload(
+			// Local payload factory only (no condition parameter)
+			_ => new CustomizationPayload(
+				AvailableOptions: new[] { "Default Option" },
+				SelectedOptions: new[] { "Default Option" },
+				CustomizationCost: 5.00m,
+				CustomizationDetails: "Default customization (fluent API)"
+			),
+			// Use callback pattern instead of fluent API
+			branch => branch.Do((mainPayload, localPayload) =>
+			{
+				var updatedMainPayload = mainPayload with
+				{
+					FinalPrice = mainPayload.Price + localPayload.CustomizationCost,
+					CustomizationDetails = localPayload.CustomizationDetails,
+					ProcessingResult = "Processed with fluent API"
+				};
+
+				return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
+					(updatedMainPayload, localPayload));
+			})
+		)
+		.Build();
+
+		var request = new ProductRequest(1001, "Test Product", 100.00m, false);
+
+		// Act
+		var result = await workflow.Execute(request);
+
+		// Assert
+		result.IsRight.Should().BeTrue();
+		result.Right.FinalPrice.Should().Be(105.00m); // 100 + 5
+		result.Right.ProcessingResult.Should().Be("Processed with fluent API");
+		result.Right.CustomizationDetails.Should().Be("Default customization (fluent API)");
+	}
 }

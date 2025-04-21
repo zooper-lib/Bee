@@ -288,6 +288,21 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	/// </summary>
 	/// <typeparam name="TLocalPayload">The type of the local branch payload</typeparam>
 	/// <param name="localPayloadFactory">The factory function that creates the local payload</param>
+	/// <returns>A branch builder that allows adding activities to the branch</returns>
+	public BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError> BranchWithLocalPayload<TLocalPayload>(
+		Func<TPayload, TLocalPayload> localPayloadFactory)
+	{
+		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(_ => true, localPayloadFactory);
+		_branchesWithLocalPayload.Add(branch);
+		return new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+	}
+
+	/// <summary>
+	/// Creates a branch in the workflow with a local payload that always executes.
+	/// This is a convenience method for organizing related activities.
+	/// </summary>
+	/// <typeparam name="TLocalPayload">The type of the local branch payload</typeparam>
+	/// <param name="localPayloadFactory">The factory function that creates the local payload</param>
 	/// <param name="branchConfiguration">An action that configures the branch</param>
 	/// <returns>The workflow builder to continue the workflow definition</returns>
 	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> BranchWithLocalPayload<TLocalPayload>(
