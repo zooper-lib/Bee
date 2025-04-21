@@ -5,7 +5,7 @@ using Zooper.Fox;
 
 namespace Zooper.Bee.Example;
 
-public class BranchWithLocalPayloadExample
+public class ContextLocalPayloadExample
 {
 	// Request models
 	public record OrderRequest(
@@ -33,7 +33,7 @@ public class BranchWithLocalPayloadExample
 		decimal TotalAmount = 0,
 		string? ShippingTrackingNumber = null);
 
-	// Local payload for shipping branch
+	// Local payload for shipping context
 	public record ShippingPayload(
 		string CustomerAddress,
 		decimal ShippingCost,
@@ -43,7 +43,7 @@ public class BranchWithLocalPayloadExample
 
 	public static async Task RunExample()
 	{
-		Console.WriteLine("\n=== Workflow Branch With Local Payload Example ===\n");
+		Console.WriteLine("\n=== Workflow With Context Local Payload Example ===\n");
 
 		// Create sample requests
 		var standardOrder = new OrderRequest(2001, "Alice Johnson", 75.00m, false);
@@ -129,9 +129,9 @@ public class BranchWithLocalPayloadExample
 			return Either<OrderError, OrderPayload>.FromRight(
 				payload with { TotalAmount = payload.OrderAmount });
 		})
-		// Branch with local payload for shipping-specific processing
-		.BranchWithLocalPayload(
-			// Only enter this branch if shipping is needed
+		// Use specialized context for shipping-specific processing
+		.WithContext(
+			// Only enter this context if shipping is needed
 			payload => payload.NeedsShipping,
 
 			// Create the local shipping payload
@@ -141,8 +141,8 @@ public class BranchWithLocalPayloadExample
 				PackagingCost: 2.75m,
 				InsuranceCost: 5.00m),
 
-			// Configure the branch with shipping-specific activities
-			branch => branch
+			// Configure the context with shipping-specific activities
+			context => context
 				// First shipping activity - calculate shipping costs
 				.Do((mainPayload, shippingPayload) =>
 				{

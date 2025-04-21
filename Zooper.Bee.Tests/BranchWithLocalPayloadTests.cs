@@ -19,23 +19,20 @@ public class BranchWithLocalPayloadTests
 		decimal Price,
 		bool NeedsCustomProcessing,
 		string? ProcessingResult = null,
-		string? CustomizationDetails = null,
 		decimal FinalPrice = 0);
 
-	// Local payload for customization branch
+	// Local payload for customization context
 	private record CustomizationPayload(
 		string[] AvailableOptions,
 		string[] SelectedOptions,
-		decimal CustomizationCost,
-		string CustomizationDetails);
+		decimal CustomizationCost);
 
 	// Success result model
 	private record ProductResult(
 		int Id,
 		string Name,
 		decimal FinalPrice,
-		string? ProcessingResult,
-		string? CustomizationDetails);
+		string? ProcessingResult);
 
 	// Error model
 	private record ProductError(string Code, string Message);
@@ -58,8 +55,7 @@ public class BranchWithLocalPayloadTests
 				payload.Id,
 				payload.Name,
 				payload.FinalPrice,
-				payload.ProcessingResult,
-				payload.CustomizationDetails)
+				payload.ProcessingResult)
 		)
 		.Do(payload =>
 		{
@@ -70,8 +66,8 @@ public class BranchWithLocalPayloadTests
 				FinalPrice = payload.Price
 			});
 		})
-		// Branch with local payload for products that need customization
-		.BranchWithLocalPayload(
+		// Context with local payload for products that need customization
+		.WithContext(
 			// Condition: Product needs custom processing
 			payload => payload.NeedsCustomProcessing,
 
@@ -79,38 +75,21 @@ public class BranchWithLocalPayloadTests
 			payload => new CustomizationPayload(
 				AvailableOptions: new[] { "Engraving", "Gift Wrap", "Extended Warranty" },
 				SelectedOptions: new[] { "Engraving", "Gift Wrap" },
-				CustomizationCost: 25.99m,
-				CustomizationDetails: "Custom initialized"
+				CustomizationCost: 25.99m
 			),
 
-			// Branch configuration
-			branch => branch
-				// First customization activity - process options
-				.Do((mainPayload, localPayload) =>
-				{
-					// Process the selected options
-					string optionsProcessed = string.Join(", ", localPayload.SelectedOptions);
-
-					// Update both payloads
-					var updatedLocalPayload = localPayload with
-					{
-						CustomizationDetails = $"Options: {optionsProcessed}"
-					};
-
-					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
-						(mainPayload, updatedLocalPayload));
-				})
-				// Second customization activity - apply costs and finalize customization
+			// Context configuration
+			context => context
+				// Apply customization costs
 				.Do((mainPayload, localPayload) =>
 				{
 					// Calculate total price
 					decimal totalPrice = mainPayload.Price + localPayload.CustomizationCost;
 
-					// Update both payloads
+					// Update the main payload with customization results
 					var updatedMainPayload = mainPayload with
 					{
 						FinalPrice = totalPrice,
-						CustomizationDetails = localPayload.CustomizationDetails,
 						ProcessingResult = $"{mainPayload.ProcessingResult} with customization"
 					};
 
@@ -128,18 +107,15 @@ public class BranchWithLocalPayloadTests
 		var standardResult = await workflow.Execute(standardProduct);
 
 		// Assert
-
 		// Custom product should go through customization
 		customResult.IsRight.Should().BeTrue();
 		customResult.Right.FinalPrice.Should().Be(125.98m); // 99.99 + 25.99
 		customResult.Right.ProcessingResult.Should().Be("Standard processing complete with customization");
-		customResult.Right.CustomizationDetails.Should().Be("Options: Engraving, Gift Wrap");
 
 		// Standard product should not go through customization
 		standardResult.IsRight.Should().BeTrue();
 		standardResult.Right.FinalPrice.Should().Be(49.99m); // Just base price
 		standardResult.Right.ProcessingResult.Should().Be("Standard processing complete");
-		standardResult.Right.CustomizationDetails.Should().BeNull();
 	}
 
 	[Fact]
@@ -149,67 +125,64 @@ public class BranchWithLocalPayloadTests
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
-				payload.Id, payload.Name, payload.FinalPrice,
-				payload.ProcessingResult, payload.CustomizationDetails)
+				payload.Id, payload.Name, payload.FinalPrice, payload.ProcessingResult)
 		)
 		.Do(payload => Either<ProductError, ProductPayload>.FromRight(payload with
 		{
 			ProcessingResult = "Initial processing",
 			FinalPrice = payload.Price
 		}))
-		.BranchWithLocalPayload(
-			// Condition
+		// First context
+		.WithContext(
+			// Always execute
 			payload => true,
 
-			// Create local payload
+			// Create local payload for first context
 			_ => new CustomizationPayload(
 				AvailableOptions: new[] { "Option1", "Option2" },
 				SelectedOptions: new[] { "Option1" },
-				CustomizationCost: 10.00m,
-				CustomizationDetails: "Branch 1 customization"
+				CustomizationCost: 10.00m
 			),
 
-			// Branch configuration
-			branch => branch
+			// Configure first context
+			context => context
 				.Do((mainPayload, localPayload) =>
 				{
 					var updatedMainPayload = mainPayload with
 					{
-						ProcessingResult = mainPayload.ProcessingResult + " -> Branch 1",
-						FinalPrice = mainPayload.FinalPrice + localPayload.CustomizationCost,
-						CustomizationDetails = localPayload.CustomizationDetails
+						ProcessingResult = mainPayload.ProcessingResult + " -> Context 1",
+						FinalPrice = mainPayload.FinalPrice + localPayload.CustomizationCost
 					};
 
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
 						(updatedMainPayload, localPayload));
 				})
 		)
-		// Another main activity that changes the main payload but shouldn't affect the next branch's local payload
+		// Main activity that changes the main payload but shouldn't affect the next context's local payload
 		.Do(payload => Either<ProductError, ProductPayload>.FromRight(payload with
 		{
 			ProcessingResult = payload.ProcessingResult + " -> Main activity"
 		}))
-		.BranchWithLocalPayload(
-			// Second branch
+		// Second context - should have its own isolated local payload
+		.WithContext(
+			// Always execute
 			payload => true,
 
 			// Create a different local payload
 			_ => new CustomizationPayload(
 				AvailableOptions: new[] { "OptionA", "OptionB" },
 				SelectedOptions: new[] { "OptionA", "OptionB" },
-				CustomizationCost: 20.00m,
-				CustomizationDetails: "Branch 2 customization"
+				CustomizationCost: 20.00m
 			),
 
-			// Branch configuration
-			branch => branch
+			// Configure second context
+			context => context
 				.Do((mainPayload, localPayload) =>
 				{
 					var updatedMainPayload = mainPayload with
 					{
-						ProcessingResult = mainPayload.ProcessingResult + " -> Branch 2",
-						FinalPrice = mainPayload.FinalPrice + localPayload.CustomizationCost,
-						CustomizationDetails = mainPayload.CustomizationDetails + " + " + localPayload.CustomizationDetails
+						ProcessingResult = mainPayload.ProcessingResult + " -> Context 2",
+						FinalPrice = mainPayload.FinalPrice + localPayload.CustomizationCost
 					};
 
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
@@ -218,16 +191,13 @@ public class BranchWithLocalPayloadTests
 		)
 		.Build();
 
-		var request = new ProductRequest(1001, "Test Product", 100.00m, true);
-
 		// Act
-		var result = await workflow.Execute(request);
+		var result = await workflow.Execute(new ProductRequest(1, "Test Product", 100.00m, false));
 
 		// Assert
 		result.IsRight.Should().BeTrue();
-		result.Right.ProcessingResult.Should().Be("Initial processing -> Main activity -> Branch 1 -> Branch 2");
-		result.Right.FinalPrice.Should().Be(130.00m); // 100 + 10 + 20
-		result.Right.CustomizationDetails.Should().Be("Branch 1 customization + Branch 2 customization");
+		result.Right.ProcessingResult.Should().Be("Initial processing -> Main activity -> Context 1 -> Context 2");
+		result.Right.FinalPrice.Should().Be(130.00m); // Base (100) + Context 1 (10) + Context 2 (20)
 	}
 
 	[Fact]
@@ -237,49 +207,60 @@ public class BranchWithLocalPayloadTests
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
-				payload.Id, payload.Name, payload.FinalPrice,
-				payload.ProcessingResult, payload.CustomizationDetails)
+				payload.Id, payload.Name, payload.FinalPrice, payload.ProcessingResult)
 		)
-		.Do(payload => Either<ProductError, ProductPayload>.FromRight(
-			payload with { ProcessingResult = "Initial processing" }))
-		.BranchWithLocalPayload(
+		.Do(payload => Either<ProductError, ProductPayload>.FromRight(payload with
+		{
+			ProcessingResult = "Initial processing",
+			FinalPrice = payload.Price
+		}))
+		.WithContext(
+			// Condition
 			payload => payload.NeedsCustomProcessing,
-			_ => new CustomizationPayload(
-				AvailableOptions: new string[0],
-				SelectedOptions: new[] { "Unavailable Option" }, // This will cause an error
-				CustomizationCost: 10.00m,
-				CustomizationDetails: "Should fail"
+
+			// Create local payload
+			payload => new CustomizationPayload(
+				AvailableOptions: new[] { "Option1", "Option2" },
+				SelectedOptions: new[] { "Option1" },
+				CustomizationCost: payload.Price * 0.10m // 10% surcharge
 			),
-			branch => branch
+
+			// Configure context
+			context => context
 				.Do((mainPayload, localPayload) =>
 				{
-					// Validate selected options are available
-					foreach (var option in localPayload.SelectedOptions)
+					// Simulate error if price is too high
+					if (mainPayload.Price + localPayload.CustomizationCost > 150)
 					{
-						if (Array.IndexOf(localPayload.AvailableOptions, option) < 0)
-						{
-							return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromLeft(
-								new ProductError("INVALID_OPTION", $"Option '{option}' is not available"));
-						}
+						return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromLeft(
+							new ProductError("PRICE_TOO_HIGH", "Product with customization exceeds price limit"));
 					}
 
+					var updatedMainPayload = mainPayload with
+					{
+						ProcessingResult = "Customization applied",
+						FinalPrice = mainPayload.Price + localPayload.CustomizationCost
+					};
+
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
-						(mainPayload, localPayload));
+						(updatedMainPayload, localPayload));
 				})
 		)
-		.Do(payload => Either<ProductError, ProductPayload>.FromRight(
-			payload with { ProcessingResult = payload.ProcessingResult + " -> Final processing" }))
+		// This activity should not execute if the context returns an error
+		.Do(payload => Either<ProductError, ProductPayload>.FromRight(payload with
+		{
+			ProcessingResult = payload.ProcessingResult + " -> Final processing"
+		}))
 		.Build();
 
-		var request = new ProductRequest(1001, "Test Product", 100.00m, true);
-
 		// Act
-		var result = await workflow.Execute(request);
+		var expensiveProduct = new ProductRequest(1, "Expensive Product", 150.00m, true);
+		var result = await workflow.Execute(expensiveProduct);
 
 		// Assert
 		result.IsLeft.Should().BeTrue();
-		result.Left.Code.Should().Be("INVALID_OPTION");
-		result.Left.Message.Should().Be("Option 'Unavailable Option' is not available");
+		result.Left.Code.Should().Be("PRICE_TOO_HIGH");
+		result.Left.Message.Should().Be("Product with customization exceeds price limit");
 	}
 
 	[Fact]
@@ -289,60 +270,65 @@ public class BranchWithLocalPayloadTests
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
-				payload.Id, payload.Name, payload.FinalPrice,
-				payload.ProcessingResult, payload.CustomizationDetails)
+				payload.Id, payload.Name, payload.FinalPrice, payload.ProcessingResult)
 		)
-		.BranchWithLocalPayload(
-			_ => true,
+		.Do(payload => Either<ProductError, ProductPayload>.FromRight(payload with
+		{
+			ProcessingResult = "Initial processing",
+			FinalPrice = payload.Price
+		}))
+		.WithContext(
+			// Always execute
+			payload => true,
+
+			// Create local payload
 			_ => new CustomizationPayload(
 				AvailableOptions: new[] { "Option1", "Option2", "Option3" },
-				SelectedOptions: new string[0], // Start with no selected options
-				CustomizationCost: 0m,          // Start with no cost
-				CustomizationDetails: "Start"
+				SelectedOptions: Array.Empty<string>(), // Start with no selections
+				CustomizationCost: 0 // Start with no cost
 			),
-			branch => branch
-				// First activity - select Option1
+
+			// Configure context with multiple activities that share local payload
+			context => context
+				// First activity selects options
 				.Do((mainPayload, localPayload) =>
 				{
-					var updatedOptions = new string[localPayload.SelectedOptions.Length + 1];
-					Array.Copy(localPayload.SelectedOptions, updatedOptions, localPayload.SelectedOptions.Length);
-					updatedOptions[updatedOptions.Length - 1] = "Option1";
+					// Add options based on product price
+					var selectedOptions = mainPayload.Price > 100
+						? new[] { "Option1", "Option2" }
+						: new[] { "Option1" };
 
 					var updatedLocalPayload = localPayload with
 					{
-						SelectedOptions = updatedOptions,
-						CustomizationCost = localPayload.CustomizationCost + 10m,
-						CustomizationDetails = localPayload.CustomizationDetails + " -> Added Option1"
+						SelectedOptions = selectedOptions
 					};
 
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
 						(mainPayload, updatedLocalPayload));
 				})
-				// Second activity - select Option2
+				// Second activity calculates cost based on selections
 				.Do((mainPayload, localPayload) =>
 				{
-					var updatedOptions = new string[localPayload.SelectedOptions.Length + 1];
-					Array.Copy(localPayload.SelectedOptions, updatedOptions, localPayload.SelectedOptions.Length);
-					updatedOptions[updatedOptions.Length - 1] = "Option2";
+					// Calculate cost based on selected options
+					decimal cost = localPayload.SelectedOptions.Length * 15.00m;
 
 					var updatedLocalPayload = localPayload with
 					{
-						SelectedOptions = updatedOptions,
-						CustomizationCost = localPayload.CustomizationCost + 15m,
-						CustomizationDetails = localPayload.CustomizationDetails + " -> Added Option2"
+						CustomizationCost = cost
 					};
 
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
 						(mainPayload, updatedLocalPayload));
 				})
-				// Third activity - finalize and update main payload
+				// Third activity applies the customization to the main payload
 				.Do((mainPayload, localPayload) =>
 				{
+					string optionsDescription = string.Join(", ", localPayload.SelectedOptions);
+
 					var updatedMainPayload = mainPayload with
 					{
-						FinalPrice = mainPayload.Price + localPayload.CustomizationCost,
-						CustomizationDetails = localPayload.CustomizationDetails,
-						ProcessingResult = $"Processed with {localPayload.SelectedOptions.Length} options"
+						ProcessingResult = $"Customized with options: {optionsDescription}",
+						FinalPrice = mainPayload.Price + localPayload.CustomizationCost
 					};
 
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
@@ -351,16 +337,21 @@ public class BranchWithLocalPayloadTests
 		)
 		.Build();
 
-		var request = new ProductRequest(1001, "Test Product", 100.00m, true);
-
 		// Act
-		var result = await workflow.Execute(request);
+		var expensiveProduct = new ProductRequest(1, "Expensive Product", 150.00m, true);
+		var cheapProduct = new ProductRequest(2, "Cheap Product", 50.00m, true);
+
+		var expensiveResult = await workflow.Execute(expensiveProduct);
+		var cheapResult = await workflow.Execute(cheapProduct);
 
 		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.FinalPrice.Should().Be(125.00m); // 100 + 10 + 15
-		result.Right.ProcessingResult.Should().Be("Processed with 2 options");
-		result.Right.CustomizationDetails.Should().Be("Start -> Added Option1 -> Added Option2");
+		expensiveResult.IsRight.Should().BeTrue();
+		expensiveResult.Right.ProcessingResult.Should().Be("Customized with options: Option1, Option2");
+		expensiveResult.Right.FinalPrice.Should().Be(180.00m); // 150 + (2 options * 15)
+
+		cheapResult.IsRight.Should().BeTrue();
+		cheapResult.Right.ProcessingResult.Should().Be("Customized with options: Option1");
+		cheapResult.Right.FinalPrice.Should().Be(65.00m); // 50 + (1 option * 15)
 	}
 
 	[Fact]
@@ -370,25 +361,25 @@ public class BranchWithLocalPayloadTests
 		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
-				payload.Id, payload.Name, payload.FinalPrice,
-				payload.ProcessingResult, payload.CustomizationDetails)
+				payload.Id, payload.Name, payload.FinalPrice, payload.ProcessingResult)
 		)
-		.BranchWithLocalPayload(
-			// Local payload factory only
+		// Use WithContext without condition (which means it always executes)
+		.WithContext(
+			// Create local payload
 			_ => new CustomizationPayload(
-				AvailableOptions: new[] { "Default Option" },
-				SelectedOptions: new[] { "Default Option" },
-				CustomizationCost: 5.00m,
-				CustomizationDetails: "Default customization"
+				AvailableOptions: new[] { "Standard Option" },
+				SelectedOptions: new[] { "Standard Option" },
+				CustomizationCost: 5.00m
 			),
-			branch => branch
+
+			// Configure context
+			context => context
 				.Do((mainPayload, localPayload) =>
 				{
 					var updatedMainPayload = mainPayload with
 					{
-						FinalPrice = mainPayload.Price + localPayload.CustomizationCost,
-						CustomizationDetails = localPayload.CustomizationDetails,
-						ProcessingResult = "Processed with default customization"
+						ProcessingResult = "Standard processing applied",
+						FinalPrice = mainPayload.Price + localPayload.CustomizationCost
 					};
 
 					return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
@@ -397,61 +388,13 @@ public class BranchWithLocalPayloadTests
 		)
 		.Build();
 
-		var request = new ProductRequest(1001, "Test Product", 100.00m, false);
-
 		// Act
-		var result = await workflow.Execute(request);
+		var product = new ProductRequest(1, "Test Product", 100.00m, false);
+		var result = await workflow.Execute(product);
 
 		// Assert
 		result.IsRight.Should().BeTrue();
+		result.Right.ProcessingResult.Should().Be("Standard processing applied");
 		result.Right.FinalPrice.Should().Be(105.00m); // 100 + 5
-		result.Right.ProcessingResult.Should().Be("Processed with default customization");
-		result.Right.CustomizationDetails.Should().Be("Default customization");
-	}
-
-	[Fact]
-	public async Task BranchWithLocalPayload_UnconditionalBranchFluentApi_AlwaysExecutes()
-	{
-		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
-			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
-			payload => new ProductResult(
-				payload.Id, payload.Name, payload.FinalPrice,
-				payload.ProcessingResult, payload.CustomizationDetails)
-		)
-		.BranchWithLocalPayload(
-			// Local payload factory only (no condition parameter)
-			_ => new CustomizationPayload(
-				AvailableOptions: new[] { "Default Option" },
-				SelectedOptions: new[] { "Default Option" },
-				CustomizationCost: 5.00m,
-				CustomizationDetails: "Default customization (fluent API)"
-			),
-			// Use callback pattern instead of fluent API
-			branch => branch.Do((mainPayload, localPayload) =>
-			{
-				var updatedMainPayload = mainPayload with
-				{
-					FinalPrice = mainPayload.Price + localPayload.CustomizationCost,
-					CustomizationDetails = localPayload.CustomizationDetails,
-					ProcessingResult = "Processed with fluent API"
-				};
-
-				return Either<ProductError, (ProductPayload, CustomizationPayload)>.FromRight(
-					(updatedMainPayload, localPayload));
-			})
-		)
-		.Build();
-
-		var request = new ProductRequest(1001, "Test Product", 100.00m, false);
-
-		// Act
-		var result = await workflow.Execute(request);
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.FinalPrice.Should().Be(105.00m); // 100 + 5
-		result.Right.ProcessingResult.Should().Be("Processed with fluent API");
-		result.Right.CustomizationDetails.Should().Be("Default customization (fluent API)");
 	}
 }

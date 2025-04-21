@@ -44,7 +44,13 @@ public class Program
 		await BranchingExample.RunExample();
 
 		// Run the branch with local payload example
-		await BranchWithLocalPayloadExample.RunExample();
+		await ContextLocalPayloadExample.RunExample();
+
+		// Run the parallel execution example
+		await ParallelExecutionExample.RunExample();
+
+		// Run the parameterless workflow example
+		await ParameterlessWorkflowExample.RunExample();
 	}
 
 	private static async Task ProcessOrder(OrderRequest request)
