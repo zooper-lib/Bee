@@ -29,6 +29,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	private readonly List<ConditionalWorkflowActivity<TPayload, TError>> _conditionalActivities = [];
 	private readonly List<WorkflowActivity<TPayload, TError>> _finallyActivities = [];
 	private readonly List<Branch<TPayload, TError>> _branches = [];
+	private readonly List<object> _branchesWithLocalPayload = [];
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="WorkflowBuilder{TRequest, TPayload, TSuccess, TError}"/> class.
@@ -246,6 +247,62 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	}
 
 	/// <summary>
+	/// Creates a branch in the workflow with a local payload that will only execute if the condition is true.
+	/// </summary>
+	/// <typeparam name="TLocalPayload">The type of the local branch payload</typeparam>
+	/// <param name="condition">The condition to evaluate</param>
+	/// <param name="localPayloadFactory">The factory function that creates the local payload</param>
+	/// <returns>A branch builder that allows adding activities to the branch</returns>
+	public BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError> BranchWithLocalPayload<TLocalPayload>(
+		Func<TPayload, bool> condition,
+		Func<TPayload, TLocalPayload> localPayloadFactory)
+	{
+		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(condition, localPayloadFactory);
+		_branchesWithLocalPayload.Add(branch);
+		return new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+	}
+
+	/// <summary>
+	/// Creates a branch in the workflow with a local payload that will only execute if the condition is true.
+	/// </summary>
+	/// <typeparam name="TLocalPayload">The type of the local branch payload</typeparam>
+	/// <param name="condition">The condition to evaluate</param>
+	/// <param name="localPayloadFactory">The factory function that creates the local payload</param>
+	/// <param name="branchConfiguration">An action that configures the branch</param>
+	/// <returns>The workflow builder to continue the workflow definition</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> BranchWithLocalPayload<TLocalPayload>(
+		Func<TPayload, bool> condition,
+		Func<TPayload, TLocalPayload> localPayloadFactory,
+		Action<BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>> branchConfiguration)
+	{
+		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(condition, localPayloadFactory);
+		_branchesWithLocalPayload.Add(branch);
+		var branchBuilder = new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+		branchConfiguration(branchBuilder);
+		return this;
+	}
+
+	/// <summary>
+	/// Creates a branch in the workflow with a local payload that always executes.
+	/// This is a convenience method for organizing related activities.
+	/// </summary>
+	/// <typeparam name="TLocalPayload">The type of the local branch payload</typeparam>
+	/// <param name="localPayloadFactory">The factory function that creates the local payload</param>
+	/// <param name="branchConfiguration">An action that configures the branch</param>
+	/// <returns>The workflow builder to continue the workflow definition</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> BranchWithLocalPayload<TLocalPayload>(
+		Func<TPayload, TLocalPayload> localPayloadFactory,
+		Action<BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>> branchConfiguration)
+	{
+		// Create a branch with a condition that always returns true
+		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(_ => true, localPayloadFactory);
+		_branchesWithLocalPayload.Add(branch);
+		var branchBuilder = new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+		branchConfiguration(branchBuilder);
+		return this;
+	}
+
+	/// <summary>
 	/// Builds a workflow that can be executed with a request of type <typeparamref name="TRequest"/>.
 	/// </summary>
 	/// <returns>A workflow that can be executed with a request of type <typeparamref name="TRequest"/>.</returns>
@@ -314,6 +371,18 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 						}
 					}
 
+					// Execute branches with local payloads
+					foreach (var branchObj in _branchesWithLocalPayload)
+					{
+						var branchResult = await ExecuteBranchWithLocalPayloadDynamic(branchObj, payload, cancellationToken);
+						if (branchResult.IsLeft)
+						{
+							return Either<TError, TSuccess>.FromLeft(branchResult.Left);
+						}
+
+						payload = branchResult.Right;
+					}
+
 					// Create success result
 					var success = _resultSelector(payload);
 					return Either<TError, TSuccess>.FromRight(success);
@@ -329,5 +398,63 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 				}
 			}
 		);
+	}
+
+	// Dynamic helper to handle branches with different local payload types
+	private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayloadDynamic(
+		object branchObj,
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		// Use reflection to call the appropriate generic method
+		var branchType = branchObj.GetType();
+		if (branchType.IsGenericType &&
+			branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
+		{
+			var typeArgs = branchType.GetGenericArguments();
+			var localPayloadType = typeArgs[1];
+
+			// Get the generic method and make it specific to the local payload type
+			var method = GetType().GetMethod(nameof(ExecuteBranchWithLocalPayload),
+				System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+			var genericMethod = method!.MakeGenericMethod(localPayloadType);
+
+			// Invoke the method with the right generic parameter
+			return (Either<TError, TPayload>)await (Task<Either<TError, TPayload>>)
+				genericMethod.Invoke(this, new[] { branchObj, payload, cancellationToken })!;
+		}
+
+		// If branch type isn't recognized, just return the payload unchanged
+		return Either<TError, TPayload>.FromRight(payload);
+	}
+
+	// Helper method to execute a branch with local payload
+	private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayload<TLocalPayload>(
+		BranchWithLocalPayload<TPayload, TLocalPayload, TError> branch,
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		if (!branch.Condition(payload))
+		{
+			return Either<TError, TPayload>.FromRight(payload);
+		}
+
+		// Create the local payload
+		var localPayload = branch.LocalPayloadFactory(payload);
+
+		// Execute the branch activities
+		foreach (var activity in branch.Activities)
+		{
+			var activityResult = await activity.Execute(payload, localPayload, cancellationToken);
+			if (activityResult.IsLeft)
+			{
+				return Either<TError, TPayload>.FromLeft(activityResult.Left);
+			}
+
+			// Update both payloads
+			(payload, localPayload) = activityResult.Right;
+		}
+
+		return Either<TError, TPayload>.FromRight(payload);
 	}
 }

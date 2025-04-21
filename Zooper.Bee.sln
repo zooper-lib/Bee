@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee", "Zooper.Bee\Zo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Example", "Zooper.Bee.Example\Zooper.Bee.Example.csproj", "{F654D462-40EE-40D1-9871-CF9DFAC82A90}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zooper.Bee.Tests", "Zooper.Bee.Tests\Zooper.Bee.Tests.csproj", "{3AC893B3-275D-44C6-ACCD-1A0B2A3D0A7C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F654D462-40EE-40D1-9871-CF9DFAC82A90}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3AC893B3-275D-44C6-ACCD-1A0B2A3D0A7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3AC893B3-275D-44C6-ACCD-1A0B2A3D0A7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3AC893B3-275D-44C6-ACCD-1A0B2A3D0A7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3AC893B3-275D-44C6-ACCD-1A0B2A3D0A7C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

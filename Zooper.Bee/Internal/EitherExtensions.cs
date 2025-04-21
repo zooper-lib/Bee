@@ -1,3 +1,4 @@
+using System;
 using Zooper.Fox;
 
 namespace Zooper.Bee.Internal;
@@ -5,13 +6,14 @@ namespace Zooper.Bee.Internal;
 /// <summary>
 /// Provides extension methods for the <see cref="Either{TLeft, TRight}"/> class.
 /// </summary>
-static internal class EitherExtensions
+internal static class EitherExtensions
 {
 	/// <summary>
 	/// Creates a new Either instance representing a successful result (Right value).
 	/// </summary>
 	/// <typeparam name="TError">The type of the error (Left value).</typeparam>
 	/// <typeparam name="TSuccess">The type of the success result (Right value).</typeparam>
+	/// <param name="_">The Either instance this method is called on (ignored).</param>
 	/// <param name="success">The success value.</param>
 	/// <returns>A new Either instance with the success value in the Right position.</returns>
 	public static Either<TError, TSuccess> Success<TError, TSuccess>(this Either<TError, TSuccess> _, TSuccess success)
@@ -22,6 +24,7 @@ static internal class EitherExtensions
 	/// </summary>
 	/// <typeparam name="TError">The type of the error (Left value).</typeparam>
 	/// <typeparam name="TSuccess">The type of the success result (Right value).</typeparam>
+	/// <param name="_">The Either instance this method is called on (ignored).</param>
 	/// <param name="error">The error value.</param>
 	/// <returns>A new Either instance with the error value in the Left position.</returns>
 	public static Either<TError, TSuccess> Fail<TError, TSuccess>(this Either<TError, TSuccess> _, TError error)
@@ -49,7 +52,14 @@ static internal class EitherExtensions
 	/// Thrown if this Either represents a failure result.
 	/// </exception>
 	public static TRight Value<TLeft, TRight>(this Either<TLeft, TRight> either)
-		=> either.Right;
+	{
+		if (!either.IsRight)
+		{
+			throw new InvalidOperationException("Cannot access the Right value of an Either that contains a Left value.");
+		}
+
+		return either.Right;
+	}
 
 	/// <summary>
 	/// Gets the error value if this Either represents a failure result, or
@@ -63,5 +73,12 @@ static internal class EitherExtensions
 	/// Thrown if this Either represents a success result.
 	/// </exception>
 	public static TLeft Error<TLeft, TRight>(this Either<TLeft, TRight> either)
-		=> either.Left;
+	{
+		if (!either.IsLeft)
+		{
+			throw new InvalidOperationException("Cannot access the Left value of an Either that contains a Right value.");
+		}
+
+		return either.Left;
+	}
 }
