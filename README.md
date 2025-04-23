@@ -5,11 +5,14 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Zooper.Bee.svg)](https://www.nuget.org/packages/Zooper.Bee/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A flexible and powerful workflow library for .NET that allows you to define complex business processes with a fluent API.
+A flexible and powerful workflow library for .NET that allows you to define complex business processes with a fluent
+API.
 
 ## Overview
 
-Zooper.Bee lets you create workflows that process requests and produce either successful results or meaningful errors. The library uses a builder pattern to construct workflows with various execution patterns including sequential, conditional, parallel, and detached operations.
+Zooper.Bee lets you create workflows that process requests and produce either successful results or meaningful errors.
+The library uses a builder pattern to construct workflows with various execution patterns including sequential,
+conditional, parallel, and detached operations.
 
 ## Key Concepts
 
@@ -17,7 +20,7 @@ Zooper.Bee lets you create workflows that process requests and produce either su
 - **Request**: The input data to the workflow
 - **Payload**: Data that passes through and gets modified by workflow activities
 - **Success**: The successful result of the workflow
-- **Error**: The error result if the workflow fails
+- **Error**: The errors result if the workflow fails
 
 ## Installation
 
@@ -90,7 +93,8 @@ Validates the incoming request before processing begins.
 
 #### Activities
 
-Activities are the building blocks of a workflow. They process the payload and can produce either a success (with modified payload) or an error.
+Activities are the building blocks of a workflow. They process the payload and can produce either a success (with
+the modified payload) or an error.
 
 ```csharp
 // Asynchronous activity
@@ -135,7 +139,8 @@ Activities that only execute if a condition is met.
 
 #### Groups
 
-Organize related activities into logical groups. Groups can have conditions and always merge their results back to the main workflow.
+Organize related activities into logical groups. Groups can have conditions and always merge their results back to the
+main workflow.
 
 ```csharp
 .Group(
@@ -149,7 +154,8 @@ Organize related activities into logical groups. Groups can have conditions and 
 
 #### Contexts with Local State
 
-Create a context with local state that is accessible to all activities within the context. This helps encapsulate related operations.
+Create a context with the local state that is accessible to all activities within the context. This helps encapsulate
+related operations.
 
 ```csharp
 .WithContext(
@@ -188,7 +194,8 @@ Execute multiple groups of activities in parallel and merge the results.
 
 #### Detached Execution
 
-Execute activities in the background without waiting for their completion. Results from detached activities are not merged back into the main workflow.
+Execute activities in the background without waiting for their completion. Results from detached activities are not
+merged back into the main workflow.
 
 ```csharp
 .Detach(
@@ -267,6 +274,38 @@ Use conditions to determine which path to take in a workflow.
     group => group
         .Do(payload => ProcessTypeB(payload))
 )
+```
+
+## Dependency Injection Integration
+
+Zooper.Bee integrates seamlessly with .NET's dependency injection system. You can register all workflow components with
+a single extension method:
+
+```csharp
+// In Startup.cs or Program.cs
+services.AddWorkflows();
+```
+
+This will scan all assemblies and register:
+
+- All workflow validations
+- All workflow activities
+- All concrete workflow classes (classes ending with "Workflow")
+
+You can also register specific components:
+
+```csharp
+// Register only validations
+services.AddWorkflowValidations();
+
+// Register only activities
+services.AddWorkflowActivities();
+
+// Specify which assemblies to scan
+services.AddWorkflows(new[] { typeof(Program).Assembly });
+
+// Specify service lifetime (Singleton, Scoped, Transient)
+services.AddWorkflows(lifetime: ServiceLifetime.Singleton);
 ```
 
 ## Performance Considerations
