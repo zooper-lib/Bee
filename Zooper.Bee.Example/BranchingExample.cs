@@ -92,7 +92,7 @@ public class BranchingExample
 				request.Password,
 				request.IsVipMember),
 
-			// Create result from final payload
+			// Create the result from the final payload
 			payload => new RegistrationSuccess(
 				payload.UserId,
 				payload.Email,
