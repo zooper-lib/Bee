@@ -10,6 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="MediatR" Version="12.5.0" />
+      <PackageReference Include="Scrutor" Version="4.2.2" />
       <PackageReference Include="Zooper.Fox" Version="1.0.0" />
     </ItemGroup>
 

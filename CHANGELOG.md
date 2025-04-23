@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2025-04-23
+### Added
+- Added new extension methods for dependency injection:
+  - `AddWorkflows()` - Registers all workflow components (validations, activities, and workflows)
+  - `AddWorkflowValidations()` - Registers workflow validations only
+  - `AddWorkflowActivities()` - Registers workflow activities only
+
+- Added support for automatic assembly scanning to discover workflow components
+- Added the ability to specify service lifetime for workflow registrations
+
 ## [3.0.0] - 2025-05-01
 
 ### Added
@@ -34,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Compatibility
 
-- All existing code using the deprecated methods will continue to work, but will show deprecation warnings
+- All existing code using the deprecated methods will continue to work but will show deprecation warnings
 - To migrate, replace:
 
   ```csharp
