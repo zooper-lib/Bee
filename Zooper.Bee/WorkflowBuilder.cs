@@ -29,15 +29,16 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	private readonly Func<TRequest, TPayload> _contextFactory;
 	private readonly Func<TPayload, TSuccess> _resultSelector;
 
-	private readonly List<WorkflowValidation<TRequest, TError>> _validations = new();
-	private readonly List<WorkflowActivity<TPayload, TError>> _activities = new();
-	private readonly List<ConditionalWorkflowActivity<TPayload, TError>> _conditionalActivities = new();
-	private readonly List<WorkflowActivity<TPayload, TError>> _finallyActivities = new();
-	private readonly List<Branch<TPayload, TError>> _branches = new();
-	private readonly List<object> _branchesWithLocalPayload = new();
+	private readonly List<WorkflowGuard<TRequest, TError>> _guards = [];
+	private readonly List<WorkflowValidation<TRequest, TError>> _validations = [];
+	private readonly List<WorkflowActivity<TPayload, TError>> _activities = [];
+	private readonly List<ConditionalWorkflowActivity<TPayload, TError>> _conditionalActivities = [];
+	private readonly List<WorkflowActivity<TPayload, TError>> _finallyActivities = [];
+	private readonly List<Branch<TPayload, TError>> _branches = [];
+	private readonly List<object> _branchesWithLocalPayload = [];
 
 	// Collections for new features
-	private readonly List<IWorkflowFeature<TPayload, TError>> _features = new();
+	private readonly List<IWorkflowFeature<TPayload, TError>> _features = [];
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="WorkflowBuilder{TRequest, TPayload, TSuccess, TError}"/> class.
@@ -81,6 +82,36 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 			new((
 					request,
 					_) => Task.FromResult(validation(request))
+			)
+		);
+		return this;
+	}
+
+	/// <summary>
+	/// Adds a guard to check if the workflow can be executed.
+	/// Guards are evaluated before any validations or activities.
+	/// If a guard fails, the workflow will not execute and will return the error.
+	/// </summary>
+	/// <param name="guard">The guard function that returns Either an error or Unit</param>
+	/// <returns>The builder instance for method chaining</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Guard(
+		Func<TRequest, CancellationToken, Task<Either<TError, Unit>>> guard)
+	{
+		_guards.Add(new(guard));
+		return this;
+	}
+
+	/// <summary>
+	/// Adds a synchronous guard to check if the workflow can be executed.
+	/// </summary>
+	/// <param name="guard">The guard function that returns Either an error or Unit</param>
+	/// <returns>The builder instance for method chaining</returns>
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Guard(Func<TRequest, Either<TError, Unit>> guard)
+	{
+		_guards.Add(
+			new((
+					request,
+					_) => Task.FromResult(guard(request))
 			)
 		);
 		return this;
@@ -505,9 +536,14 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		TRequest request,
 		CancellationToken cancellationToken)
 	{
+		// We run the validations first to ensure the request is valid before proceeding
 		var validationResult = await RunValidationsAsync(request, cancellationToken);
 		if (validationResult.IsLeft)
 			return Either<TError, TSuccess>.FromLeft(validationResult.Left!);
+
+		var guardResult = await RunGuardsAsync(request, cancellationToken);
+		if (guardResult.IsLeft)
+			return Either<TError, TSuccess>.FromLeft(guardResult.Left!);
 
 		var payload = _contextFactory(request);
 		if (payload == null)
@@ -574,6 +610,28 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		}
 
 		return Either<TError, TPayload>.FromRight(default!);
+	}
+
+	/// <summary>
+	/// Runs all configured guards against the request.
+	/// </summary>
+	/// <param name="request">The workflow request.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either with Left if any guard fails, or Right with Unit on success.
+	/// </returns>
+	private async Task<Either<TError, Unit>> RunGuardsAsync(
+		TRequest request,
+		CancellationToken cancellationToken)
+	{
+		foreach (var guard in _guards)
+		{
+			var result = await guard.Check(request, cancellationToken);
+			if (result.IsLeft && result.Left != null)
+				return Either<TError, Unit>.FromLeft(result.Left);
+		}
+
+		return Either<TError, Unit>.FromRight(Unit.Value);
 	}
 
 	/// <summary>

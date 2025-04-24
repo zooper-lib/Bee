@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.3.0 - 2025.04.24
+
+### Added
+
+- New guards feature for verifying workflow execution requirements
+    - Added `Guard` methods to check if a workflow can be executed
+    - Guards run after validations and before Activities and provide early termination
+
+- New component interfaces for dependency injection and workflow composition
+    - Added `IWorkflowGuard` and `IWorkflowGuard<TRequest, TError>` interfaces
+    - Added `IWorkflowGuards` and `IWorkflowGuards<TRequest, TError>` interfaces
+
+- New extension methods for registering guards with dependency injection
+    - Added `AddWorkflowGuards()` for registering workflow guards
+
 ## 3.2.1 - 2025.04.24
 
 ### Modified
