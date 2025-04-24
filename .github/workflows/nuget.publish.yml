@@ -86,6 +86,7 @@ jobs:
       matrix:
         project:
           - Zooper.Bee/Zooper.Bee.csproj
+          - Zooper.Bee.MediatR/Zooper.Bee.MediatR.csproj
 
     steps:
       - name: Checkout Repository

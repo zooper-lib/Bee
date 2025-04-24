@@ -2,15 +2,15 @@
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
-        <LangVersion>latest</LangVersion>
-        <Nullable>enable</Nullable>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <IsPackable>true</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Scrutor" Version="4.2.2" />
+      <PackageReference Include="MediatR" Version="12.0.1" />
       <PackageReference Include="Zooper.Fox" Version="1.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Zooper.Bee\Zooper.Bee.csproj" />
     </ItemGroup>
 
 </Project>
