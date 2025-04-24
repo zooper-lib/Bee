@@ -1,8 +1,11 @@
 using Zooper.Fox;
+using Zooper.Bee.Extensions;
+
+// ReSharper disable ClassNeverInstantiated.Global
 
 namespace Zooper.Bee.Example;
 
-public class ParameterlessWorkflowExample
+public sealed class ParameterlessWorkflowExample
 {
 	// Success model
 	public record ProcessingResult(DateTime ProcessedAt, string Status);
@@ -43,17 +46,28 @@ public class ParameterlessWorkflowExample
 			// Configure the workflow
 			builder => builder
 				.Do(payload =>
-				{
-					Console.WriteLine("Processing step 1...");
-					return Either<ProcessingError, ProcessingPayload>.FromRight(
-						payload with { Status = "Step 1 completed" });
-				})
+					{
+						Console.WriteLine("Processing step 1...");
+						return Either<ProcessingError, ProcessingPayload>.FromRight(
+							payload with
+							{
+								Status = "Step 1 completed"
+							}
+						);
+					}
+				)
 				.Do(payload =>
-				{
-					Console.WriteLine("Processing step 2...");
-					return Either<ProcessingError, ProcessingPayload>.FromRight(
-						payload with { Status = "Step 2 completed", IsCompleted = true });
-				})
+					{
+						Console.WriteLine("Processing step 2...");
+						return Either<ProcessingError, ProcessingPayload>.FromRight(
+							payload with
+							{
+								Status = "Step 2 completed",
+								IsCompleted = true
+							}
+						);
+					}
+				)
 		);
 
 		// Execute without parameters
@@ -74,25 +88,36 @@ public class ParameterlessWorkflowExample
 	{
 		// Create a workflow with Unit type as request
 		var workflow = new WorkflowBuilder<Unit, ProcessingPayload, ProcessingResult, ProcessingError>(
-			// Use Unit parameter (ignored)
-			_ => new ProcessingPayload(StartedAt: DateTime.UtcNow),
+				// Use Unit parameter (ignored)
+				_ => new ProcessingPayload(StartedAt: DateTime.UtcNow),
 
-			// Result selector
-			payload => new ProcessingResult(DateTime.UtcNow, payload.Status)
-		)
-		.Do(payload =>
-		{
-			Console.WriteLine("Executing task A...");
-			return Either<ProcessingError, ProcessingPayload>.FromRight(
-				payload with { Status = "Task A completed" });
-		})
-		.Do(payload =>
-		{
-			Console.WriteLine("Executing task B...");
-			return Either<ProcessingError, ProcessingPayload>.FromRight(
-				payload with { Status = "Task B completed", IsCompleted = true });
-		})
-		.Build();
+				// Result selector
+				payload => new ProcessingResult(DateTime.UtcNow, payload.Status)
+			)
+			.Do(payload =>
+				{
+					Console.WriteLine("Executing task A...");
+					return Either<ProcessingError, ProcessingPayload>.FromRight(
+						payload with
+						{
+							Status = "Task A completed"
+						}
+					);
+				}
+			)
+			.Do(payload =>
+				{
+					Console.WriteLine("Executing task B...");
+					return Either<ProcessingError, ProcessingPayload>.FromRight(
+						payload with
+						{
+							Status = "Task B completed",
+							IsCompleted = true
+						}
+					);
+				}
+			)
+			.Build();
 
 		// Execute with Unit.Value
 		var result = await workflow.Execute(Unit.Value);
@@ -112,25 +137,36 @@ public class ParameterlessWorkflowExample
 	{
 		// Create a workflow with Unit type as request
 		var workflow = new WorkflowBuilder<Unit, ProcessingPayload, ProcessingResult, ProcessingError>(
-			// Use Unit parameter (ignored)
-			_ => new ProcessingPayload(StartedAt: DateTime.UtcNow),
+				// Use Unit parameter (ignored)
+				_ => new ProcessingPayload(StartedAt: DateTime.UtcNow),
 
-			// Result selector
-			payload => new ProcessingResult(DateTime.UtcNow, payload.Status)
-		)
-		.Do(payload =>
-		{
-			Console.WriteLine("Running process X...");
-			return Either<ProcessingError, ProcessingPayload>.FromRight(
-				payload with { Status = "Process X completed" });
-		})
-		.Do(payload =>
-		{
-			Console.WriteLine("Running process Y...");
-			return Either<ProcessingError, ProcessingPayload>.FromRight(
-				payload with { Status = "Process Y completed", IsCompleted = true });
-		})
-		.Build();
+				// Result selector
+				payload => new ProcessingResult(DateTime.UtcNow, payload.Status)
+			)
+			.Do(payload =>
+				{
+					Console.WriteLine("Running process X...");
+					return Either<ProcessingError, ProcessingPayload>.FromRight(
+						payload with
+						{
+							Status = "Process X completed"
+						}
+					);
+				}
+			)
+			.Do(payload =>
+				{
+					Console.WriteLine("Running process Y...");
+					return Either<ProcessingError, ProcessingPayload>.FromRight(
+						payload with
+						{
+							Status = "Process Y completed",
+							IsCompleted = true
+						}
+					);
+				}
+			)
+			.Build();
 
 		// Execute using the extension method (no parameters)
 		var result = await workflow.Execute();

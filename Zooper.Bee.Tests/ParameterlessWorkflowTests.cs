@@ -3,12 +3,14 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Xunit;
 using Zooper.Fox;
+using Zooper.Bee.Extensions;
 
 namespace Zooper.Bee.Tests;
 
 public class ParameterlessWorkflowTests
 {
 	#region Test Models
+
 	// Payload model for tests
 	private record TestPayload(DateTime StartTime, string Status = "Waiting");
 
@@ -17,6 +19,7 @@ public class ParameterlessWorkflowTests
 
 	// Error model
 	private record TestError(string Code, string Message);
+
 	#endregion
 
 	[Fact]
@@ -24,17 +27,27 @@ public class ParameterlessWorkflowTests
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<Unit, TestPayload, TestSuccess, TestError>(
-			// Convert Unit to initial payload
-			_ => new TestPayload(DateTime.UtcNow),
+				// Convert Unit to initial payload
+				_ => new TestPayload(DateTime.UtcNow),
 
-			// Convert final payload to success result
-			payload => new TestSuccess(payload.Status, true)
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { Status = "Processing" }))
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { Status = "Completed" }))
-		.Build();
+				// Convert final payload to success result
+				payload => new TestSuccess(payload.Status, true)
+			)
+			.Do(payload => Either<TestError, TestPayload>.FromRight(
+					payload with
+					{
+						Status = "Processing"
+					}
+				)
+			)
+			.Do(payload => Either<TestError, TestPayload>.FromRight(
+					payload with
+					{
+						Status = "Completed"
+					}
+				)
+			)
+			.Build();
 
 		// Act
 		var result = await workflow.Execute(Unit.Value);
@@ -59,9 +72,19 @@ public class ParameterlessWorkflowTests
 			// Configure the workflow
 			builder => builder
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { Status = "Processing" }))
+						payload with
+						{
+							Status = "Processing"
+						}
+					)
+				)
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { Status = "Completed" }))
+						payload with
+						{
+							Status = "Completed"
+						}
+					)
+				)
 		);
 
 		// Act
@@ -78,14 +101,24 @@ public class ParameterlessWorkflowTests
 	{
 		// Arrange
 		var workflow = new WorkflowBuilder<Unit, TestPayload, TestSuccess, TestError>(
-			_ => new TestPayload(DateTime.UtcNow),
-			payload => new TestSuccess(payload.Status, true)
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { Status = "Processing" }))
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { Status = "Completed" }))
-		.Build();
+				_ => new TestPayload(DateTime.UtcNow),
+				payload => new TestSuccess(payload.Status, true)
+			)
+			.Do(payload => Either<TestError, TestPayload>.FromRight(
+					payload with
+					{
+						Status = "Processing"
+					}
+				)
+			)
+			.Do(payload => Either<TestError, TestPayload>.FromRight(
+					payload with
+					{
+						Status = "Completed"
+					}
+				)
+			)
+			.Build();
 
 		// Act - using extension method (no parameters)
 		var result = await workflow.Execute();
@@ -101,18 +134,25 @@ public class ParameterlessWorkflowTests
 	{
 		// Arrange
 		var workflow = WorkflowBuilderFactory.Create<TestPayload, TestSuccess, TestError>(
-			() => new TestPayload(DateTime.UtcNow),
-			payload => new TestSuccess(payload.Status, true)
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { Status = "Processing" }))
-		.Do(payload =>
-		{
-			// Simulate an error in the workflow
-			return Either<TestError, TestPayload>.FromLeft(
-				new TestError("PROCESSING_FAILED", "Failed to complete processing"));
-		})
-		.Build();
+				() => new TestPayload(DateTime.UtcNow),
+				payload => new TestSuccess(payload.Status, true)
+			)
+			.Do(payload => Either<TestError, TestPayload>.FromRight(
+					payload with
+					{
+						Status = "Processing"
+					}
+				)
+			)
+			.Do(payload =>
+				{
+					// Simulate an error in the workflow
+					return Either<TestError, TestPayload>.FromLeft(
+						new TestError("PROCESSING_FAILED", "Failed to complete processing")
+					);
+				}
+			)
+			.Build();
 
 		// Act
 		var result = await workflow.Execute();

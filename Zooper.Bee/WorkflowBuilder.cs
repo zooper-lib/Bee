@@ -276,7 +276,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(condition, localPayloadFactory);
 		_branchesWithLocalPayload.Add(branch);
-		return new(this, branch);
+		return new(branch);
 	}
 
 	/// <summary>
@@ -295,7 +295,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(condition, localPayloadFactory);
 		_branchesWithLocalPayload.Add(branch);
-		var branchBuilder = new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+		var branchBuilder = new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(branch);
 		branchConfiguration(branchBuilder);
 		return this;
 	}
@@ -313,7 +313,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(_ => true, localPayloadFactory);
 		_branchesWithLocalPayload.Add(branch);
-		return new(this, branch);
+		return new(branch);
 	}
 
 	/// <summary>
