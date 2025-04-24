@@ -69,9 +69,7 @@ else
 
 ## Building Workflows
 
-### Basic Operations
-
-#### Validation
+### Validation
 
 Validates the incoming request before processing begins.
 
@@ -91,7 +89,35 @@ Validates the incoming request before processing begins.
 })
 ```
 
-#### Activities
+### Guards
+
+Guards allow you to define checks that run before a workflow begins execution. They're ideal for authentication,
+authorization, account validation, or any other requirement that must be satisfied before a workflow can proceed.
+
+```csharp
+// Asynchronous guard
+.Guard(async (request, cancellationToken) =>
+{
+    var isAuthorized = await CheckAuthorizationAsync(request, cancellationToken);
+    return isAuthorized ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
+})
+
+// Synchronous guard
+.Guard(request =>
+{
+    var isAuthorized = CheckAuthorization(request);
+    return isAuthorized ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
+})
+```
+
+#### Benefits of Guards
+
+- Guards run before creating the workflow context, providing early validation
+- They provide a clear separation between "can this workflow run?" and the actual workflow logic
+- Common checks like authentication can be standardized and reused
+- Failures short-circuit the workflow, preventing unnecessary work
+
+### Activities
 
 Activities are the building blocks of a workflow. They process the payload and can produce either a success (with
 the modified payload) or an error.
@@ -119,7 +145,7 @@ the modified payload) or an error.
 )
 ```
 
-#### Conditional Activities
+### Conditional Activities
 
 Activities that only execute if a condition is met.
 
@@ -135,9 +161,7 @@ Activities that only execute if a condition is met.
 )
 ```
 
-### Advanced Features
-
-#### Groups
+### Groups
 
 Organize related activities into logical groups. Groups can have conditions and always merge their results back to the
 main workflow.
@@ -152,7 +176,7 @@ main workflow.
 )
 ```
 
-#### Contexts with Local State
+### Contexts with Local State
 
 Create a context with the local state that is accessible to all activities within the context. This helps encapsulate
 related operations.
@@ -175,7 +199,7 @@ related operations.
 )
 ```
 
-#### Parallel Execution
+### Parallel Execution
 
 Execute multiple groups of activities in parallel and merge the results.
 
@@ -192,7 +216,7 @@ Execute multiple groups of activities in parallel and merge the results.
 )
 ```
 
-#### Detached Execution
+### Detached Execution
 
 Execute activities in the background without waiting for their completion. Results from detached activities are not
 merged back into the main workflow.
@@ -210,7 +234,7 @@ merged back into the main workflow.
 )
 ```
 
-#### Parallel Detached Execution
+### Parallel Detached Execution
 
 Execute multiple groups of detached activities in parallel without waiting for completion.
 
@@ -227,7 +251,7 @@ Execute multiple groups of detached activities in parallel without waiting for c
 )
 ```
 
-#### Finally Block
+### Finally Block
 
 Activities that always execute, even if the workflow fails.
 

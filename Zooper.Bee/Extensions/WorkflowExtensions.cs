@@ -76,6 +76,9 @@ public static class WorkflowExtensions
 		// Register all workflow validations
 		services.AddWorkflowValidations(assembliesToScan, lifetime);
 
+		// Register all workflow guards
+		services.AddWorkflowGuards(assembliesToScan, lifetime);
+
 		// Register all workflow activities
 		services.AddWorkflowActivities(assembliesToScan, lifetime);
 
