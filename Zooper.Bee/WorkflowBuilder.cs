@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Zooper.Bee.Features;
 using Zooper.Bee.Internal;
 using Zooper.Bee.Internal.Executors;
 using Zooper.Fox;
+
+// ReSharper disable MemberCanBePrivate.Global
 
 namespace Zooper.Bee;
 
@@ -63,7 +66,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Validate(
 		Func<TRequest, CancellationToken, Task<Option<TError>>> validation)
 	{
-		_validations.Add(new WorkflowValidation<TRequest, TError>(validation));
+		_validations.Add(new(validation));
 		return this;
 	}
 
@@ -72,12 +75,14 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	/// </summary>
 	/// <param name="validation">The validation function</param>
 	/// <returns>The builder instance for method chaining</returns>
-	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Validate(
-		Func<TRequest, Option<TError>> validation)
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Validate(Func<TRequest, Option<TError>> validation)
 	{
-		_validations.Add(new WorkflowValidation<TRequest, TError>(
-			(request, _) => Task.FromResult(validation(request))
-		));
+		_validations.Add(
+			new((
+					request,
+					_) => Task.FromResult(validation(request))
+			)
+		);
 		return this;
 	}
 
@@ -89,7 +94,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Do(
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_activities.Add(new WorkflowActivity<TPayload, TError>(activity));
+		_activities.Add(new(activity));
 		return this;
 	}
 
@@ -98,12 +103,14 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	/// </summary>
 	/// <param name="activity">The activity function</param>
 	/// <returns>The builder instance for method chaining</returns>
-	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Do(
-		Func<TPayload, Either<TError, TPayload>> activity)
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_activities.Add(new WorkflowActivity<TPayload, TError>(
-			(payload, _) => Task.FromResult(activity(payload))
-		));
+		_activities.Add(
+			new((
+					payload,
+					_) => Task.FromResult(activity(payload))
+			)
+		);
 		return this;
 	}
 
@@ -117,8 +124,9 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_activities.Add(new WorkflowActivity<TPayload, TError>(activity));
+			_activities.Add(new(activity));
 		}
+
 		return this;
 	}
 
@@ -127,15 +135,18 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	/// </summary>
 	/// <param name="activities">The activity functions</param>
 	/// <returns>The builder instance for method chaining</returns>
-	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> DoAll(
-		params Func<TPayload, Either<TError, TPayload>>[] activities)
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> DoAll(params Func<TPayload, Either<TError, TPayload>>[] activities)
 	{
 		foreach (var activity in activities)
 		{
-			_activities.Add(new WorkflowActivity<TPayload, TError>(
-				(payload, _) => Task.FromResult(activity(payload))
-			));
+			_activities.Add(
+				new((
+						payload,
+						_) => Task.FromResult(activity(payload))
+				)
+			);
 		}
+
 		return this;
 	}
 
@@ -150,9 +161,9 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
 		_conditionalActivities.Add(
-			new ConditionalWorkflowActivity<TPayload, TError>(
+			new(
 				condition,
-				new WorkflowActivity<TPayload, TError>(activity)
+				new(activity)
 			)
 		);
 		return this;
@@ -169,10 +180,11 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 		Func<TPayload, Either<TError, TPayload>> activity)
 	{
 		_conditionalActivities.Add(
-			new ConditionalWorkflowActivity<TPayload, TError>(
+			new(
 				condition,
-				new WorkflowActivity<TPayload, TError>(
-					(payload, _) => Task.FromResult(activity(payload))
+				new((
+						payload,
+						_) => Task.FromResult(activity(payload))
 				)
 			)
 		);
@@ -189,7 +201,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var branch = new Branch<TPayload, TError>(condition);
 		_branches.Add(branch);
-		return new BranchBuilder<TRequest, TPayload, TSuccess, TError>(this, branch);
+		return new(this, branch);
 	}
 
 	/// <summary>
@@ -264,7 +276,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(condition, localPayloadFactory);
 		_branchesWithLocalPayload.Add(branch);
-		return new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+		return new(this, branch);
 	}
 
 	/// <summary>
@@ -301,7 +313,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var branch = new BranchWithLocalPayload<TPayload, TLocalPayload, TError>(_ => true, localPayloadFactory);
 		_branchesWithLocalPayload.Add(branch);
-		return new BranchWithLocalPayloadBuilder<TRequest, TPayload, TLocalPayload, TSuccess, TError>(this, branch);
+		return new(this, branch);
 	}
 
 	/// <summary>
@@ -386,7 +398,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 
 	/// <summary>
 	/// Creates a parallel execution of multiple groups with an optional condition.
-	/// All groups execute in parallel and their results are merged back into the main workflow.
+	/// All groups execute in parallel, and their results are merged back into the main workflow.
 	/// </summary>
 	/// <param name="condition">The condition to evaluate. If null, the parallel execution always occurs.</param>
 	/// <param name="parallelConfiguration">An action that configures the parallel execution</param>
@@ -404,7 +416,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 
 	/// <summary>
 	/// Creates a parallel execution of multiple groups that always executes.
-	/// All groups execute in parallel and their results are merged back into the main workflow.
+	/// All groups execute in parallel, and their results are merged back into the main workflow.
 	/// </summary>
 	/// <param name="parallelConfiguration">An action that configures the parallel execution</param>
 	/// <returns>The workflow builder to continue the workflow definition</returns>
@@ -416,7 +428,7 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 
 	/// <summary>
 	/// Creates a parallel execution of multiple detached groups with an optional condition.
-	/// All detached groups execute in parallel and their results are NOT merged back.
+	/// All detached groups execute in parallel, and their results are NOT merged back.
 	/// </summary>
 	/// <param name="condition">The condition to evaluate. If null, the parallel detached execution always occurs.</param>
 	/// <param name="parallelDetachedConfiguration">An action that configures the parallel detached execution</param>
@@ -427,14 +439,15 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		var parallelDetached = new Features.Parallel.ParallelDetached<TPayload, TError>(condition);
 		_features.Add(parallelDetached);
-		var parallelDetachedBuilder = new Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>(this, parallelDetached);
+		var parallelDetachedBuilder =
+			new Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>(this, parallelDetached);
 		parallelDetachedConfiguration(parallelDetachedBuilder);
 		return this;
 	}
 
 	/// <summary>
 	/// Creates a parallel execution of multiple detached groups that always executes.
-	/// All detached groups execute in parallel and their results are NOT merged back.
+	/// All detached groups execute in parallel, and their results are NOT merged back.
 	/// </summary>
 	/// <param name="parallelDetachedConfiguration">An action that configures the parallel detached execution</param>
 	/// <returns>The workflow builder to continue the workflow definition</returns>
@@ -445,473 +458,341 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 	}
 
 	/// <summary>
-	/// Adds an activity to the finally block that will always execute, even if the workflow fails.
+	/// Adds an activity to the "finally" block that will always execute, even if the workflow fails.
 	/// </summary>
 	/// <param name="activity">The activity to execute</param>
 	/// <returns>The builder instance for method chaining</returns>
 	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Finally(
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_finallyActivities.Add(new WorkflowActivity<TPayload, TError>(activity));
+		_finallyActivities.Add(new(activity));
 		return this;
 	}
 
 	/// <summary>
-	/// Adds a synchronous activity to the finally block that will always execute, even if the workflow fails.
+	/// Adds a synchronous activity to the "finally" block that will always execute, even if the workflow fails.
 	/// </summary>
 	/// <param name="activity">The activity to execute</param>
 	/// <returns>The builder instance for method chaining</returns>
-	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Finally(
-		Func<TPayload, Either<TError, TPayload>> activity)
+	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> Finally(Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_finallyActivities.Add(new WorkflowActivity<TPayload, TError>(
-			(payload, _) => Task.FromResult(activity(payload))
-		));
+		_finallyActivities.Add(
+			new((
+					payload,
+					_) => Task.FromResult(activity(payload))
+			)
+		);
 		return this;
 	}
 
 	/// <summary>
-	/// Builds a workflow that can be executed with a request of type <typeparamref name="TRequest"/>.
+	/// Builds a workflow that processes a request and returns either a success or an error.
 	/// </summary>
-	/// <returns>A workflow that can be executed with a request of type <typeparamref name="TRequest"/>.</returns>
 	public Workflow<TRequest, TSuccess, TError> Build()
 	{
-		return new Workflow<TRequest, TSuccess, TError>(
-			async (request, cancellationToken) =>
-			{
-				// Run validations
-				foreach (var validation in _validations)
-				{
-					// Skip null validations
-					if (validation == null)
-					{
-						continue;
-					}
-
-					var validationResult = await validation.Validate(request, cancellationToken);
-					if (validationResult.IsSome)
-					{
-						var errorValue = validationResult.Value;
-						// Skip if error value is null
-						if (errorValue == null)
-						{
-							continue;
-						}
-						return Either<TError, TSuccess>.FromLeft(errorValue);
-					}
-				}
-
-				// Create initial payload
-				var payload = _contextFactory(request);
-
-				// Skip if payload is null
-				if (payload == null)
-				{
-					// Return a default success with default payload
-					return Either<TError, TSuccess>.FromRight(_resultSelector(default!));
-				}
-
-				// Execute main activities
-				try
-				{
-					foreach (var activity in _activities)
-					{
-						// Skip null activities
-						if (activity == null)
-						{
-							continue;
-						}
-
-						var activityResult = await activity.Execute(payload, cancellationToken);
-						if (activityResult == null)
-						{
-							continue;
-						}
-
-						if (activityResult.IsLeft)
-						{
-							var errorValue = activityResult.Left;
-							// Skip if error value is null
-							if (errorValue == null)
-							{
-								continue;
-							}
-							return Either<TError, TSuccess>.FromLeft(errorValue);
-						}
-
-						// Skip if result is null
-						if (activityResult.Right == null)
-						{
-							continue;
-						}
-						payload = activityResult.Right;
-					}
-
-					// Execute conditional activities
-					foreach (var conditionalActivity in _conditionalActivities)
-					{
-						// Skip null conditional activities
-						if (conditionalActivity == null)
-						{
-							continue;
-						}
-
-						if (conditionalActivity.ShouldExecute(payload))
-						{
-							// Skip if activity is null
-							if (conditionalActivity.Activity == null)
-							{
-								continue;
-							}
-
-							var activityResult = await conditionalActivity.Activity.Execute(payload, cancellationToken);
-							if (activityResult == null)
-							{
-								continue;
-							}
-
-							if (activityResult.IsLeft)
-							{
-								var errorValue = activityResult.Left;
-								// Skip if error value is null
-								if (errorValue == null)
-								{
-									continue;
-								}
-								return Either<TError, TSuccess>.FromLeft(errorValue);
-							}
-
-							// Skip if result is null
-							if (activityResult.Right == null)
-							{
-								continue;
-							}
-							payload = activityResult.Right;
-						}
-					}
-
-					// Execute branches
-					foreach (var branch in _branches)
-					{
-						// Skip null branches
-						if (branch == null)
-						{
-							continue;
-						}
-
-						// Skip if condition is null
-						if (branch.Condition == null)
-						{
-							continue;
-						}
-
-						if (branch.Condition(payload))
-						{
-							// Skip if activities collection is null
-							if (branch.Activities == null)
-							{
-								continue;
-							}
-
-							foreach (var activity in branch.Activities)
-							{
-								// Skip null activities
-								if (activity == null)
-								{
-									continue;
-								}
-
-								var activityResult = await activity.Execute(payload, cancellationToken);
-								if (activityResult == null)
-								{
-									continue;
-								}
-
-								if (activityResult.IsLeft)
-								{
-									var errorValue = activityResult.Left;
-									// Skip if error value is null
-									if (errorValue == null)
-									{
-										continue;
-									}
-									return Either<TError, TSuccess>.FromLeft(errorValue);
-								}
-
-								// Skip if result is null
-								if (activityResult.Right == null)
-								{
-									continue;
-								}
-								payload = activityResult.Right;
-							}
-						}
-					}
-
-					// Execute branches with local payload
-					foreach (var branchObj in _branchesWithLocalPayload)
-					{
-						// Skip null branch objects
-						if (branchObj == null)
-						{
-							continue;
-						}
-
-						var branchResult = await ExecuteBranchWithLocalPayloadDynamic(branchObj, payload, cancellationToken);
-						if (branchResult == null)
-						{
-							continue;
-						}
-
-						if (branchResult.IsLeft)
-						{
-							var errorValue = branchResult.Left;
-							// Skip if error value is null
-							if (errorValue == null)
-							{
-								continue;
-							}
-							return Either<TError, TSuccess>.FromLeft(errorValue);
-						}
-
-						// Skip if result is null
-						if (branchResult.Right == null)
-						{
-							continue;
-						}
-						payload = branchResult.Right;
-					}
-
-					// Execute workflow features (Group, WithContext, Detach, Parallel, etc.)
-					var featureExecutorFactory = new FeatureExecutorFactory<TPayload, TError>();
-					foreach (var feature in _features)
-					{
-						// Skip null features
-						if (feature == null)
-						{
-							continue;
-						}
-
-						// Execute the feature
-						var featureResult = await featureExecutorFactory.ExecuteFeature(feature, payload, cancellationToken);
-						if (featureResult == null)
-						{
-							continue;
-						}
-
-						if (featureResult.IsLeft)
-						{
-							var errorValue = featureResult.Left;
-							// Skip if error value is null
-							if (errorValue == null)
-							{
-								continue;
-							}
-							return Either<TError, TSuccess>.FromLeft(errorValue);
-						}
-
-						if (feature.ShouldMerge)
-						{
-							// Skip if result is null
-							if (featureResult.Right == null)
-							{
-								continue;
-							}
-							payload = featureResult.Right;
-						}
-					}
-
-					// Create success result
-					var success = _resultSelector(payload);
-
-					// Skip if success result is null
-					if (success == null)
-					{
-						// Return an empty success result
-						return Either<TError, TSuccess>.FromRight(default!);
-					}
-
-					return Either<TError, TSuccess>.FromRight(success);
-				}
-				finally
-				{
-					// Execute finally activities
-					foreach (var finallyActivity in _finallyActivities)
-					{
-						// Skip null finally activities
-						if (finallyActivity == null)
-						{
-							continue;
-						}
-
-						// Skip if payload is null
-						if (payload == null)
-						{
-							continue;
-						}
-
-						// Ignore errors from finally activities
-						_ = await finallyActivity.Execute(payload, cancellationToken);
-					}
-				}
-			}
-		);
+		return new(ExecuteWorkflowAsync);
 	}
 
-	// Dynamic helper to handle branches with different local payload types
-	private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayloadDynamic(
-		object branchObj,
-		TPayload payload,
+	/// <summary>
+	/// Executes the workflow: runs validations, activities, conditional logic, branches, features, and finally actions.
+	/// </summary>
+	/// <param name="request">The workflow request input.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if any stage fails, or the final success result (Right) on completion.
+	/// </returns>
+	private async Task<Either<TError, TSuccess>> ExecuteWorkflowAsync(
+		TRequest request,
 		CancellationToken cancellationToken)
 	{
-		// Skip if branch object is null
-		if (branchObj == null)
-		{
-			return Either<TError, TPayload>.FromRight(payload);
-		}
+		var validationResult = await RunValidationsAsync(request, cancellationToken);
+		if (validationResult.IsLeft)
+			return Either<TError, TSuccess>.FromLeft(validationResult.Left!);
 
-		// Use reflection to call the appropriate generic method
-		var branchType = branchObj.GetType();
-
-		// Skip if branch type is null
-		if (branchType == null)
-		{
-			return Either<TError, TPayload>.FromRight(payload);
-		}
+		var payload = _contextFactory(request);
+		if (payload == null)
+			return Either<TError, TSuccess>.FromRight(_resultSelector(default!));
 
 		try
 		{
-			if (branchType.IsGenericType &&
-				branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
-			{
-				var typeArgs = branchType.GetGenericArguments();
-				if (typeArgs == null || typeArgs.Length < 2)
-				{
-					return Either<TError, TPayload>.FromRight(payload);
-				}
+			var activitiesResult = await RunActivitiesAsync(payload, cancellationToken);
+			if (activitiesResult.IsLeft)
+				return Either<TError, TSuccess>.FromLeft(activitiesResult.Left!);
 
-				var localPayloadType = typeArgs[1];
-				if (localPayloadType == null)
-				{
-					return Either<TError, TPayload>.FromRight(payload);
-				}
+			payload = activitiesResult.Right!;
 
-				// Get the generic method and make it specific to the local payload type
-				var method = GetType().GetMethod(nameof(ExecuteBranchWithLocalPayload),
-					System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+			var conditionalResult = await RunConditionalActivitiesAsync(payload, cancellationToken);
+			if (conditionalResult.IsLeft)
+				return Either<TError, TSuccess>.FromLeft(conditionalResult.Left!);
 
-				// Check if method is null before using it
-				if (method == null)
-				{
-					throw new InvalidOperationException($"Method {nameof(ExecuteBranchWithLocalPayload)} not found.");
-				}
+			payload = conditionalResult.Right!;
 
-				var genericMethod = method.MakeGenericMethod(localPayloadType);
-				if (genericMethod == null)
-				{
-					return Either<TError, TPayload>.FromRight(payload);
-				}
+			var branchesResult = await RunBranchesAsync(payload, cancellationToken);
+			if (branchesResult.IsLeft)
+				return Either<TError, TSuccess>.FromLeft(branchesResult.Left!);
 
-				// Ensure payload is not null before passing to the method
-				if (payload == null)
-				{
-					payload = default!; // Use default value if null
-				}
+			payload = branchesResult.Right!;
 
-				// Invoke the method with the right generic parameter
-				var result = genericMethod.Invoke(this, new object[] { branchObj, payload, cancellationToken });
-				return result == null
-					? throw new InvalidOperationException("Method invocation returned null.")
-					: await (Task<Either<TError, TPayload>>)result;
-			}
+			var branchLocalsResult = await RunBranchesWithLocalPayloadAsync(payload, cancellationToken);
+			if (branchLocalsResult.IsLeft)
+				return Either<TError, TSuccess>.FromLeft(branchLocalsResult.Left!);
+
+			payload = branchLocalsResult.Right!;
+
+			var featuresResult = await RunFeaturesAsync(payload, cancellationToken);
+			if (featuresResult.IsLeft)
+				return Either<TError, TSuccess>.FromLeft(featuresResult.Left!);
+
+			payload = featuresResult.Right!;
+
+			var successValue = _resultSelector(payload);
+			return Either<TError, TSuccess>.FromRight(successValue ?? default!);
 		}
-		catch (Exception)
+		finally
 		{
-			// If any reflection-related exception occurs, return the payload unchanged
-			return Either<TError, TPayload>.FromRight(payload);
+			_ = await RunFinallyActivitiesAsync(payload, cancellationToken);
+		}
+	}
+
+	/// <summary>
+	/// Runs all configured validations against the request.
+	/// </summary>
+	/// <param name="request">The workflow request.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either with Left if any validation fails, or Right with a placeholder payload on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> RunValidationsAsync(
+		TRequest request,
+		CancellationToken cancellationToken)
+	{
+		foreach (var validation in _validations)
+		{
+			var validationOption = await validation.Validate(request, cancellationToken);
+			if (validationOption.IsSome && validationOption.Value != null)
+				return Either<TError, TPayload>.FromLeft(validationOption.Value);
 		}
 
-		// If branch type isn't recognized, just return the payload unchanged
+		return Either<TError, TPayload>.FromRight(default!);
+	}
+
+	/// <summary>
+	/// Executes all registered activities in sequence, returning either the first encountered error or the transformed payload.
+	/// </summary>
+	/// <param name="payload">The initial payload to process.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if any activity fails, or the final payload (Right) on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> RunActivitiesAsync(
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		foreach (var activity in _activities)
+		{
+			var result = await activity.Execute(payload, cancellationToken);
+			if (result.IsLeft && result.Left != null)
+				return Either<TError, TPayload>.FromLeft(result.Left);
+
+			payload = result.Right!;
+		}
+
 		return Either<TError, TPayload>.FromRight(payload);
 	}
 
-	// Helper method to execute a branch with local payload
+	/// <summary>
+	/// Executes conditional activities when their condition is met.
+	/// </summary>
+	/// <param name="payload">The current payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if any conditional activity fails, or the updated payload (Right) on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> RunConditionalActivitiesAsync(
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		foreach (var conditionalActivity in _conditionalActivities)
+		{
+			if (!conditionalActivity.ShouldExecute(payload))
+				continue;
+
+			var result = await conditionalActivity.Activity.Execute(payload, cancellationToken);
+			if (result.IsLeft && result.Left != null)
+				return Either<TError, TPayload>.FromLeft(result.Left);
+
+			payload = result.Right!;
+		}
+
+		return Either<TError, TPayload>.FromRight(payload);
+	}
+
+	/// <summary>
+	/// Executes simple branches when their condition is met.
+	/// </summary>
+	/// <param name="payload">The current payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if any branch activity fails, or the updated payload (Right) on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> RunBranchesAsync(
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		foreach (var branch in _branches)
+		{
+			if (!branch.Condition(payload))
+				continue;
+
+			foreach (var activity in branch.Activities)
+			{
+				var result = await activity.Execute(payload, cancellationToken);
+				if (result.IsLeft && result.Left != null)
+					return Either<TError, TPayload>.FromLeft(result.Left);
+
+				payload = result.Right!;
+			}
+		}
+
+		return Either<TError, TPayload>.FromRight(payload);
+	}
+
+	/// <summary>
+	/// Executes branches with the local payload via reflection helper.
+	/// </summary>
+	/// <param name="payload">The current payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if any branch fails, or the updated payload (Right) on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> RunBranchesWithLocalPayloadAsync(
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		foreach (var branchObject in _branchesWithLocalPayload)
+		{
+			var result = await ExecuteBranchWithLocalPayloadDynamic(branchObject, payload, cancellationToken);
+			if (result.IsLeft && result.Left != null)
+				return Either<TError, TPayload>.FromLeft(result.Left);
+
+			payload = result.Right!;
+		}
+
+		return Either<TError, TPayload>.FromRight(payload);
+	}
+
+	/// <summary>
+	/// Executes workflow features like Group, Context, Detach, Parallel, merging results when applicable.
+	/// </summary>
+	/// <param name="payload">The current payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if any feature fails, or the updated payload (Right) on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> RunFeaturesAsync(
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		var factory = new FeatureExecutorFactory<TPayload, TError>();
+
+		foreach (var feature in _features)
+		{
+			var result = await factory.ExecuteFeature(feature, payload, cancellationToken);
+			if (result.IsLeft && result.Left != null)
+				return Either<TError, TPayload>.FromLeft(result.Left);
+
+			if (feature.ShouldMerge)
+				payload = result.Right!;
+		}
+
+		return Either<TError, TPayload>.FromRight(payload);
+	}
+
+	/// <summary>
+	/// Executes all the "finally" activities, ignoring errors.
+	/// </summary>
+	/// <param name="payload">The current payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>The original payload after the "finally" activities.</returns>
+	private async Task<TPayload> RunFinallyActivitiesAsync(
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		foreach (var finallyActivity in _finallyActivities)
+			_ = await finallyActivity.Execute(payload, cancellationToken);
+
+		return payload;
+	}
+
+	/// <summary>
+	/// Dynamically executes a BranchWithLocalPayload via reflection, invoking the generic helper for the correct local payload type.
+	/// </summary>
+	/// <param name="branchObject">
+	/// The branch instance, expected to be BranchWithLocalPayload&lt;TPayload, TLocalPayload, TError&gt;
+	/// </param>
+	/// <param name="payload">The main workflow payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if execution failed,
+	/// or the updated payload (Right) on success.
+	/// </returns>
+	private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayloadDynamic(
+		object branchObject,
+		TPayload payload,
+		CancellationToken cancellationToken)
+	{
+		var branchType = branchObject.GetType();
+
+		if (branchType.IsGenericType &&
+		    branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
+		{
+			var methodInfo = typeof(WorkflowBuilder<TRequest, TPayload, TSuccess, TError>)
+				.GetMethod(nameof(ExecuteBranchWithLocalPayload), BindingFlags.NonPublic | BindingFlags.Instance);
+			if (methodInfo == null)
+				throw new InvalidOperationException($"Method {nameof(ExecuteBranchWithLocalPayload)} not found.");
+
+			var localPayloadType = branchType.GetGenericArguments()[1];
+			var genericMethod = methodInfo.MakeGenericMethod(localPayloadType);
+			var task = (Task<Either<TError, TPayload>>)genericMethod.Invoke(
+				this,
+				[
+					branchObject, payload, cancellationToken
+				]
+			)!;
+			return await task.ConfigureAwait(false);
+		}
+
+		return Either<TError, TPayload>.FromRight(payload);
+	}
+
+	/// <summary>
+	/// Executes a BranchWithLocalPayload&lt;TPayload, TLocalPayload, TError&gt; branch.
+	/// </summary>
+	/// <typeparam name="TLocalPayload">Type of the local payload used by this branch.</typeparam>
+	/// <param name="branch">The branch configuration and activities.</param>
+	/// <param name="payload">The main workflow payload.</param>
+	/// <param name="cancellationToken">Token to observe for cancellation.</param>
+	/// <returns>
+	/// An Either containing the error (Left) if an activity fails,
+	/// or the updated payload (Right) on success.
+	/// </returns>
 	private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayload<TLocalPayload>(
 		BranchWithLocalPayload<TPayload, TLocalPayload, TError> branch,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
-		// Check if branch is null
-		if (branch == null)
-		{
-			return Either<TError, TPayload>.FromRight(payload);
-		}
-
-		// Check if condition is null
-		if (branch.Condition == null)
-		{
-			return Either<TError, TPayload>.FromRight(payload);
-		}
-
 		if (!branch.Condition(payload))
-		{
 			return Either<TError, TPayload>.FromRight(payload);
-		}
 
-		// Check if local payload factory is null
-		if (branch.LocalPayloadFactory == null)
-		{
-			return Either<TError, TPayload>.FromRight(payload);
-		}
+		var localPayload = branch.LocalPayloadFactory(payload);
 
-		// Create the local payload
-		TLocalPayload? localPayload;
-		try
-		{
-			localPayload = branch.LocalPayloadFactory(payload);
-		}
-		catch (Exception)
-		{
-			// If we can't create the local payload, return the payload unchanged
-			return Either<TError, TPayload>.FromRight(payload);
-		}
-
-		// Check if activities collection is null
-		if (branch.Activities == null)
-		{
-			return Either<TError, TPayload>.FromRight(payload);
-		}
-
-		// Execute the branch activities
 		foreach (var activity in branch.Activities)
 		{
-			// Skip null activities
-			if (activity == null)
-			{
-				continue;
-			}
+			var result = await activity.Execute(payload, localPayload, cancellationToken);
+			if (result.IsLeft)
+				return Either<TError, TPayload>.FromLeft(result.Left);
 
-			var activityResult = await activity.Execute(payload, localPayload, cancellationToken);
-			if (activityResult == null)
-			{
-				// Skip if the activity result is null
-				continue;
-			}
-
-			if (activityResult.IsLeft)
-			{
-				return Either<TError, TPayload>.FromLeft(activityResult.Left);
-			}
-
-			// Update both payloads
-			if (activityResult.Right.Item1 != null)
-			{
-				payload = activityResult.Right.Item1;
-			}
-			if (activityResult.Right.Item2 != null)
-			{
-				localPayload = activityResult.Right.Item2;
-			}
+			(payload, localPayload) = result.Right;
 		}
 
 		return Either<TError, TPayload>.FromRight(payload);
