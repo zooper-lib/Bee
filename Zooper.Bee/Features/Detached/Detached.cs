@@ -24,7 +24,7 @@ internal sealed class Detached<TPayload, TError> : IWorkflowFeature<TPayload, TE
 	/// <summary>
 	/// The list of activities in this detached group.
 	/// </summary>
-	public List<WorkflowActivity<TPayload, TError>> Activities { get; } = new();
+	public List<WorkflowStep<TPayload, TError>> Activities { get; } = new();
 
 	/// <summary>
 	/// Creates a new detached group with an optional condition.
