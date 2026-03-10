@@ -169,7 +169,7 @@ internal class ParallelExecutor<TPayload, TError> : FeatureExecutorBase<TPayload
 
 	// Helper method to execute a group's activities
 	private async Task<Either<TError, TPayload>> ExecuteGroupActivities(
-		List<WorkflowActivity<TPayload, TError>> activities,
+		List<WorkflowStep<TPayload, TError>> activities,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{

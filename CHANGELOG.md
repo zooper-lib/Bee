@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- New `IWorkflowStep` and `IWorkflowStep<TPayload, TError>` interfaces to replace `IWorkflowActivity`
+- New `IWorkflowSteps` and `IWorkflowSteps<TPayload, TError>` interfaces to replace `IWorkflowActivities`
+- New `WorkflowStepsExtensions` class with `AddWorkflowSteps*` extension methods for dependency injection
+
+### Deprecated
+
+- `IWorkflowActivity` and `IWorkflowActivity<TPayload, TError>` — use `IWorkflowStep` / `IWorkflowStep<TPayload, TError>` instead
+- `IWorkflowActivities` and `IWorkflowActivities<TPayload, TError>` — use `IWorkflowSteps` / `IWorkflowSteps<TPayload, TError>` instead
+- `WorkflowActivitiesExtensions` class and all `AddWorkflowActivities*` methods — use `WorkflowStepsExtensions` and `AddWorkflowSteps*` instead
+
+### Compatibility
+
+- All existing code using the deprecated types and methods will continue to work but will show deprecation warnings
+- To migrate, replace:
+
+  ```csharp
+  services.AddWorkflowActivities();
+  ```
+
+  With:
+
+  ```csharp
+  services.AddWorkflowSteps();
+  ```
+
+  And replace interface implementations:
+
+  ```csharp
+  public class MyStep : IWorkflowActivity<MyPayload, MyError>
+  ```
+
+  With:
+
+  ```csharp
+  public class MyStep : IWorkflowStep<MyPayload, MyError>
+  ```
+
 ## 3.3.0 - 2025.04.24
 
 ### Added

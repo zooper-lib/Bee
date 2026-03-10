@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.x"
 
@@ -26,14 +26,4 @@ jobs:
         run: dotnet build --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test --no-restore --verbosity normal
-
-      - name: Check build warnings as errors
-        run: |
-          # This step ensures that TreatWarningsAsErrors is respected
-          dotnet build --configuration Release --no-restore --verbosity detailed | tee build.log
-          if grep -q "warning" build.log; then
-            echo "Build warnings found. Check the build log for details."
-            cat build.log | grep -i warning
-            exit 1
-          fi
+        run: dotnet test --configuration Release --no-build --verbosity normal

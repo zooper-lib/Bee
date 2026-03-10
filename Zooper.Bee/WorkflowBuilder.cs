@@ -31,9 +31,9 @@ public sealed class WorkflowBuilder<TRequest, TPayload, TSuccess, TError>
 
 	private readonly List<WorkflowGuard<TRequest, TError>> _guards = [];
 	private readonly List<WorkflowValidation<TRequest, TError>> _validations = [];
-	private readonly List<WorkflowActivity<TPayload, TError>> _activities = [];
-	private readonly List<ConditionalWorkflowActivity<TPayload, TError>> _conditionalActivities = [];
-	private readonly List<WorkflowActivity<TPayload, TError>> _finallyActivities = [];
+	private readonly List<WorkflowStep<TPayload, TError>> _activities = [];
+	private readonly List<ConditionalWorkflowStep<TPayload, TError>> _conditionalActivities = [];
+	private readonly List<WorkflowStep<TPayload, TError>> _finallyActivities = [];
 	private readonly List<Branch<TPayload, TError>> _branches = [];
 	private readonly List<object> _branchesWithLocalPayload = [];
 

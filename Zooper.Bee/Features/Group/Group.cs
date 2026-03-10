@@ -24,7 +24,7 @@ internal sealed class Group<TPayload, TError> : IWorkflowFeature<TPayload, TErro
 	/// <summary>
 	/// The list of activities in this group.
 	/// </summary>
-	public List<WorkflowActivity<TPayload, TError>> Activities { get; } = new();
+	public List<WorkflowStep<TPayload, TError>> Activities { get; } = new();
 
 	/// <summary>
 	/// Creates a new group with an optional condition.

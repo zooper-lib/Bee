@@ -34,7 +34,7 @@ public sealed class GroupBuilder<TRequest, TPayload, TSuccess, TError>
 	public GroupBuilder<TRequest, TPayload, TSuccess, TError> Do(
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_group.Activities.Add(new WorkflowActivity<TPayload, TError>(activity));
+		_group.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
 		return this;
 	}
 
@@ -46,7 +46,7 @@ public sealed class GroupBuilder<TRequest, TPayload, TSuccess, TError>
 	public GroupBuilder<TRequest, TPayload, TSuccess, TError> Do(
 		Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_group.Activities.Add(new WorkflowActivity<TPayload, TError>(
+		_group.Activities.Add(new WorkflowStep<TPayload, TError>(
 			(payload, _) => Task.FromResult(activity(payload))
 		));
 		return this;
@@ -62,7 +62,7 @@ public sealed class GroupBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_group.Activities.Add(new WorkflowActivity<TPayload, TError>(activity));
+			_group.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
 		}
 		return this;
 	}
@@ -77,7 +77,7 @@ public sealed class GroupBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_group.Activities.Add(new WorkflowActivity<TPayload, TError>(
+			_group.Activities.Add(new WorkflowStep<TPayload, TError>(
 				(payload, _) => Task.FromResult(activity(payload))
 			));
 		}
