@@ -11,7 +11,7 @@ namespace Zooper.Bee.Internal;
 internal sealed class Branch<TPayload, TError>
 {
 	public Func<TPayload, bool> Condition { get; }
-	public List<WorkflowActivity<TPayload, TError>> Activities { get; } = [];
+	public List<WorkflowStep<TPayload, TError>> Activities { get; } = [];
 
 	public Branch(Func<TPayload, bool> condition)
 	{

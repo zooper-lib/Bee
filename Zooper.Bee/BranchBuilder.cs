@@ -29,7 +29,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	/// <returns>The branch builder for fluent chaining</returns>
 	public BranchBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_branch.Activities.Add(new WorkflowActivity<TPayload, TError>(activity));
+		_branch.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
 		return this;
 	}
 
@@ -40,7 +40,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	/// <returns>The branch builder for fluent chaining</returns>
 	public BranchBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_branch.Activities.Add(new WorkflowActivity<TPayload, TError>((payload, _) =>
+		_branch.Activities.Add(new WorkflowStep<TPayload, TError>((payload, _) =>
 			Task.FromResult(activity(payload))
 		));
 		return this;
@@ -55,7 +55,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_branch.Activities.Add(new WorkflowActivity<TPayload, TError>(activity));
+			_branch.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
 		}
 		return this;
 	}
@@ -69,7 +69,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_branch.Activities.Add(new WorkflowActivity<TPayload, TError>((payload, _) =>
+			_branch.Activities.Add(new WorkflowStep<TPayload, TError>((payload, _) =>
 				Task.FromResult(activity(payload))
 			));
 		}
