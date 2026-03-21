@@ -33,9 +33,9 @@ public class ParallelExecutionExample
 			true
 		);
 
-		// Build the workflows
-		var parallelWorkflow = CreateParallelWorkflow();
-		var parallelDetachedWorkflow = CreateParallelDetachedWorkflow();
+		// Build the railways
+		var parallelWorkflow = CreateParallelRailway();
+		var parallelDetachedWorkflow = CreateParallelDetachedRailway();
 
 		// Process with parallel execution
 		Console.WriteLine("Processing with parallel execution:");
@@ -49,7 +49,7 @@ public class ParallelExecutionExample
 	}
 
 	private static async Task ProcessData(
-		Workflow<DataProcessingRequest, DataProcessingResult, DataProcessingError> workflow,
+		Railway<DataProcessingRequest, DataProcessingResult, DataProcessingError> workflow,
 		DataProcessingRequest request)
 	{
 		var result = await workflow.Execute(request);
@@ -68,9 +68,9 @@ public class ParallelExecutionExample
 		}
 	}
 
-	private static Workflow<DataProcessingRequest, DataProcessingResult, DataProcessingError> CreateParallelWorkflow()
+	private static Railway<DataProcessingRequest, DataProcessingResult, DataProcessingError> CreateParallelRailway()
 	{
-		return new WorkflowBuilder<DataProcessingRequest, DataProcessingPayload, DataProcessingResult, DataProcessingError>(
+		return new RailwayBuilder<DataProcessingRequest, DataProcessingPayload, DataProcessingResult, DataProcessingError>(
 			// Create initial payload from request
 			request => new DataProcessingPayload(
 				request.DataId,
@@ -151,9 +151,9 @@ public class ParallelExecutionExample
 		.Build();
 	}
 
-	private static Workflow<DataProcessingRequest, DataProcessingResult, DataProcessingError> CreateParallelDetachedWorkflow()
+	private static Railway<DataProcessingRequest, DataProcessingResult, DataProcessingError> CreateParallelDetachedRailway()
 	{
-		return new WorkflowBuilder<DataProcessingRequest, DataProcessingPayload, DataProcessingResult, DataProcessingError>(
+		return new RailwayBuilder<DataProcessingRequest, DataProcessingPayload, DataProcessingResult, DataProcessingError>(
 			// Create initial payload from request
 			request => new DataProcessingPayload(
 				request.DataId,
@@ -171,7 +171,7 @@ public class ParallelExecutionExample
 			Console.WriteLine($"Preparing to process data {payload.DataId} with detached parallel execution...");
 
 			// Since detached execution doesn't wait for results, we'll count all segments as processed
-			// in the main workflow
+			// in the main railway
 			return Either<DataProcessingError, DataProcessingPayload>.FromRight(
 				payload with
 				{
@@ -213,7 +213,7 @@ public class ParallelExecutionExample
 		// Finalize the processing (this runs immediately, not waiting for detached tasks)
 		.Do(payload =>
 		{
-			Console.WriteLine($"Main workflow: Finalizing data processing for {payload.DataId}...");
+			Console.WriteLine($"Main railway: Finalizing data processing for {payload.DataId}...");
 			var completedAt = DateTime.UtcNow;
 
 			return Either<DataProcessingError, DataProcessingPayload>.FromRight(

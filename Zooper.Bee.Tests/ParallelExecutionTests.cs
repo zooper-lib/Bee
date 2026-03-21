@@ -32,7 +32,7 @@ public class ParallelExecutionTests
 	public async Task Parallel_ExecutesGroupsInParallel_CombinesResults()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Id, request.Values),
 			payload => new TestSuccess(payload.Id, payload.Sum, payload.Product, payload.IsProcessed)
 		)
@@ -87,7 +87,7 @@ public class ParallelExecutionTests
 	public async Task Parallel_WithConditionalGroups_OnlyExecutesMatchingGroups()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Id, request.Values),
 			payload => new TestSuccess(payload.Id, payload.Sum, payload.Product, payload.IsProcessed)
 		)
@@ -164,7 +164,7 @@ public class ParallelExecutionTests
 	public async Task Parallel_ErrorInOneGroup_StopsExecutionAndReturnsError()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Id, request.Values),
 			payload => new TestSuccess(payload.Id, payload.Sum, payload.Product, payload.IsProcessed)
 		)
@@ -235,7 +235,7 @@ public class ParallelExecutionTests
 		var syncObj = new object();
 		var backgroundTaskRan = false;
 
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Id, request.Values),
 			payload => new TestSuccess(payload.Id, payload.Sum, payload.Product, payload.IsProcessed)
 		)
@@ -326,7 +326,7 @@ public class ParallelExecutionTests
 		var syncObj = new object();
 		var backgroundTaskRan = false;
 
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Id, request.Values),
 			payload => new TestSuccess(payload.Id, payload.Sum, payload.Product, payload.IsProcessed)
 		)

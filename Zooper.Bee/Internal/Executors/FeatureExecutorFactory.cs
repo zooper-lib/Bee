@@ -41,7 +41,7 @@ internal class FeatureExecutorFactory<TPayload, TError>
 	/// <param name="cancellationToken">The cancellation token</param>
 	/// <returns>Either the error or the modified payload</returns>
 	public async Task<Either<TError, TPayload>> ExecuteFeature(
-		IWorkflowFeature<TPayload, TError> feature,
+		IRailwayFeature<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{

@@ -5,7 +5,7 @@ using Zooper.Fox;
 
 namespace Zooper.Bee.Tests;
 
-public class WorkflowTests
+public class RailwayTests
 {
 	#region Test Models
 	// Request model
@@ -30,7 +30,7 @@ public class WorkflowTests
 	public async Task Execute_ValidRequest_ReturnsSuccessResult()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			// Create the payload from the request
 			request => new TestPayload(request.Name, request.Value),
 
@@ -69,7 +69,7 @@ public class WorkflowTests
 	public async Task Execute_WithValidation_RejectsInvalidRequest()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "Default")
 		)
@@ -99,7 +99,7 @@ public class WorkflowTests
 	public async Task Execute_WithConditionalActivity_OnlyExecutesWhenConditionMet()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "Default")
 		)
@@ -137,7 +137,7 @@ public class WorkflowTests
 	public async Task Execute_WithErrorInActivity_ReturnsError()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "Default")
 		)
@@ -171,7 +171,7 @@ public class WorkflowTests
 		// Arrange
 		bool finallyExecuted = false;
 
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "Default")
 		)

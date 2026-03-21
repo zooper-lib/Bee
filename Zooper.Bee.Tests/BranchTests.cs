@@ -31,7 +31,7 @@ public class BranchTests
 	public async Task Branch_ExecutesWhenConditionIsTrue()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
@@ -85,7 +85,7 @@ public class BranchTests
 	public async Task Branch_SkipsWhenConditionIsFalse()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
@@ -117,7 +117,7 @@ public class BranchTests
 	public async Task Branch_UnconditionalBranch_AlwaysExecutes()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
@@ -142,7 +142,7 @@ public class BranchTests
 	public async Task Branch_MultipleBranches_CorrectlyExecutes()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
@@ -185,7 +185,7 @@ public class BranchTests
 	public async Task Branch_WithError_StopsExecutionAndReturnsError()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)
@@ -225,7 +225,7 @@ public class BranchTests
 	public async Task Branch_WithMultipleActivities_ExecutesAllInOrder()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value, request.Category),
 			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
 		)

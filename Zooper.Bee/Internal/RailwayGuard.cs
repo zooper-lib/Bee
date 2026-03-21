@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Zooper.Fox;
@@ -6,16 +6,16 @@ using Zooper.Fox;
 namespace Zooper.Bee.Internal;
 
 /// <summary>
-/// Represents a guard that checks if a workflow can be executed.
+/// Represents a guard that checks if a railway can be executed.
 /// </summary>
 /// <typeparam name="TRequest">Type of the request</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class WorkflowGuard<TRequest, TError>
+internal sealed class RailwayGuard<TRequest, TError>
 {
 	private readonly Func<TRequest, CancellationToken, Task<Either<TError, Unit>>> _condition;
 	private readonly string? _name;
 
-	public WorkflowGuard(
+	public RailwayGuard(
 		Func<TRequest, CancellationToken, Task<Either<TError, Unit>>> condition,
 		string? name = null)
 	{

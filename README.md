@@ -5,22 +5,22 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Zooper.Bee.svg)](https://www.nuget.org/packages/Zooper.Bee/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A flexible and powerful workflow library for .NET that allows you to define complex business processes with a fluent
+A flexible and powerful railway-oriented programming library for .NET that allows you to define complex business processes with a fluent
 API.
 
 ## Overview
 
-Zooper.Bee lets you create workflows that process requests and produce either successful results or meaningful errors.
-The library uses a builder pattern to construct workflows with various execution patterns including sequential,
+Zooper.Bee lets you create railways that process requests and produce either successful results or meaningful errors.
+The library uses a builder pattern to construct railways with various execution patterns including sequential,
 conditional, parallel, and detached operations.
 
 ## Key Concepts
 
-- **Workflow**: A sequence of operations that process a request to produce a result or error
-- **Request**: The input data to the workflow
-- **Payload**: Data that passes through and gets modified by workflow activities
-- **Success**: The successful result of the workflow
-- **Error**: The errors result if the workflow fails
+- **Railway**: A sequence of operations that process a request to produce a result or error
+- **Request**: The input data to the railway
+- **Payload**: Data that passes through and gets modified by railway activities
+- **Success**: The successful result of the railway
+- **Error**: The errors result if the railway fails
 
 ## Installation
 
@@ -31,8 +31,8 @@ dotnet add package Zooper.Bee
 ## Getting Started
 
 ```csharp
-// Define a simple workflow
-var workflow = new WorkflowBuilder<Request, Payload, SuccessResult, ErrorResult>(
+// Define a simple railway
+var railway = new RailwayBuilder<Request, Payload, SuccessResult, ErrorResult>(
     // Factory function that creates the initial payload from the request
     request => new Payload { Data = request.Data },
 
@@ -55,8 +55,8 @@ var workflow = new WorkflowBuilder<Request, Payload, SuccessResult, ErrorResult>
 })
 .Build();
 
-// Execute the workflow
-var result = await workflow.Execute(new Request { Data = "hello world" }, CancellationToken.None);
+// Execute the railway
+var result = await railway.Execute(new Request { Data = "hello world" }, CancellationToken.None);
 if (result.IsRight)
 {
     Console.WriteLine($"Success: {result.Right.ProcessedData}"); // Output: Success: HELLO WORLD
@@ -67,7 +67,7 @@ else
 }
 ```
 
-## Building Workflows
+## Building Railways
 
 ### Validation
 
@@ -91,8 +91,8 @@ Validates the incoming request before processing begins.
 
 ### Guards
 
-Guards allow you to define checks that run before a workflow begins execution. They're ideal for authentication,
-authorization, account validation, or any other requirement that must be satisfied before a workflow can proceed.
+Guards allow you to define checks that run before a railway begins execution. They're ideal for authentication,
+authorization, account validation, or any other requirement that must be satisfied before a railway can proceed.
 
 ```csharp
 // Asynchronous guard
@@ -112,14 +112,14 @@ authorization, account validation, or any other requirement that must be satisfi
 
 #### Benefits of Guards
 
-- Guards run before creating the workflow context, providing early validation
-- They provide a clear separation between "can this workflow run?" and the actual workflow logic
+- Guards run before creating the railway context, providing early validation
+- They provide a clear separation between "can this railway run?" and the actual railway logic
 - Common checks like authentication can be standardized and reused
-- Failures short-circuit the workflow, preventing unnecessary work
+- Failures short-circuit the railway, preventing unnecessary work
 
 ### Activities
 
-Activities are the building blocks of a workflow. They process the payload and can produce either a success (with
+Activities are the building blocks of a railway. They process the payload and can produce either a success (with
 the modified payload) or an error.
 
 ```csharp
@@ -164,7 +164,7 @@ Activities that only execute if a condition is met.
 ### Groups
 
 Organize related activities into logical groups. Groups can have conditions and always merge their results back to the
-main workflow.
+main railway.
 
 ```csharp
 .Group(
@@ -219,7 +219,7 @@ Execute multiple groups of activities in parallel and merge the results.
 ### Detached Execution
 
 Execute activities in the background without waiting for their completion. Results from detached activities are not
-merged back into the main workflow.
+merged back into the main railway.
 
 ```csharp
 .Detach(
@@ -253,7 +253,7 @@ Execute multiple groups of detached activities in parallel without waiting for c
 
 ### Finally Block
 
-Activities that always execute, even if the workflow fails.
+Activities that always execute, even if the railway fails.
 
 ```csharp
 .Finally(payload =>
@@ -285,7 +285,7 @@ Activities that always execute, even if the workflow fails.
 
 ### Conditional Branching
 
-Use conditions to determine which path to take in a workflow.
+Use conditions to determine which path to take in a railway.
 
 ```csharp
 .Group(
@@ -302,52 +302,82 @@ Use conditions to determine which path to take in a workflow.
 
 ## Dependency Injection Integration
 
-Zooper.Bee integrates seamlessly with .NET's dependency injection system. You can register all workflow components with
+Zooper.Bee integrates seamlessly with .NET's dependency injection system. You can register all railway components with
 a single extension method:
 
 ```csharp
 // In Startup.cs or Program.cs
-services.AddWorkflows();
+services.AddRailways();
 ```
 
 This will scan all assemblies and register:
 
-- All workflow validations
-- All workflow activities
-- All concrete workflow classes (classes ending with "Workflow")
+- All railway validations
+- All railway activities
+- All concrete railway classes (classes ending with "Railway")
 
 You can also register specific components:
 
 ```csharp
 // Register only validations
-services.AddWorkflowValidations();
+services.AddRailwayValidations();
 
 // Register only activities
-services.AddWorkflowActivities();
+services.AddRailwayActivities();
 
 // Specify which assemblies to scan
-services.AddWorkflows(new[] { typeof(Program).Assembly });
+services.AddRailways(new[] { typeof(Program).Assembly });
 
 // Specify service lifetime (Singleton, Scoped, Transient)
-services.AddWorkflows(lifetime: ServiceLifetime.Singleton);
+services.AddRailways(lifetime: ServiceLifetime.Singleton);
 ```
 
 ## Performance Considerations
 
 - Use `Parallel` for CPU-bound operations that can benefit from parallel execution
-- Use `Detach` for I/O operations that don't affect the main workflow
+- Use `Detach` for I/O operations that don't affect the main railway
 - Be mindful of resource contention in parallel operations
 - Consider using `WithContext` to maintain state between related activities
 
 ## Best Practices
 
 1. Keep activities small and focused on a single responsibility
-2. Use descriptive names for your workflow methods
+2. Use descriptive names for your railway methods
 3. Group related activities together
 4. Handle errors at appropriate levels
 5. Use `Finally` for cleanup operations
 6. Validate requests early to fail fast
 7. Use contextual state to avoid passing too many parameters
+
+## Migration from Workflow to Railway
+
+As of the latest version, all `Workflow` classes have been renamed to `Railway` to better reflect the railway-oriented programming pattern used by the library. The old `Workflow` names are preserved as `[Obsolete]` shims for backward compatibility.
+
+### What changed
+
+| Old Name | New Name |
+|---|---|
+| `Workflow<TRequest, TSuccess, TError>` | `Railway<TRequest, TSuccess, TError>` |
+| `WorkflowBuilder<...>` | `RailwayBuilder<...>` |
+| `WorkflowBuilderFactory` | `RailwayBuilderFactory` |
+| `CreateWorkflow<...>()` | `CreateRailway<...>()` |
+| `IWorkflowStep` | `IRailwayStep` |
+| `IWorkflowValidation` | `IRailwayValidation` |
+| `IWorkflowGuard` | `IRailwayGuard` |
+| `AddWorkflows()` | `AddRailways()` |
+| `AddWorkflowSteps()` | `AddRailwaySteps()` |
+
+### Backward compatibility
+
+All old type names and extension methods are still available but marked with `[Obsolete]`. Your existing code will continue to compile and work, but you will see deprecation warnings encouraging you to migrate to the new names.
+
+### How to migrate
+
+1. Replace all `Workflow<` type references with `Railway<`
+2. Replace `WorkflowBuilder<` with `RailwayBuilder<`
+3. Replace `WorkflowBuilderFactory.CreateWorkflow<` with `RailwayBuilderFactory.CreateRailway<`
+4. Replace DI registration calls (`AddWorkflows()` -> `AddRailways()`, etc.)
+5. Update any interface implementations (`IWorkflowStep` -> `IRailwayStep`, etc.)
 
 ## License
 

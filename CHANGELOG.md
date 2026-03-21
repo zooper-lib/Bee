@@ -2,10 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [3.4.1] - 2026-03-21
+
+### Changed
+
+- **Renamed all `Workflow` classes to `Railway`** to better reflect the railway-oriented programming pattern
+  - `Workflow<TRequest, TSuccess, TError>` -> `Railway<TRequest, TSuccess, TError>`
+  - `WorkflowBuilder<...>` -> `RailwayBuilder<...>`
+  - `WorkflowBuilderFactory` -> `RailwayBuilderFactory`
+  - `CreateWorkflow<...>()` -> `CreateRailway<...>()`
+  - `IWorkflowStep` -> `IRailwayStep`
+  - `IWorkflowValidation` -> `IRailwayValidation`
+  - `IWorkflowGuard` -> `IRailwayGuard`
+  - `AddWorkflows()` -> `AddRailways()`
+  - `AddWorkflowSteps()` -> `AddRailwaySteps()`
+- All old `Workflow` names are preserved as `[Obsolete]` shims for backward compatibility
+- Updated all example files to use the new Railway terminology
+
+## [3.4.0] - 2026-03-10
 
 ### Added
 

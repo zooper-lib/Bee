@@ -9,7 +9,7 @@ namespace Zooper.Bee.Features.Context;
 /// <typeparam name="TPayload">Type of the main workflow payload</typeparam>
 /// <typeparam name="TLocalState">Type of the local context state</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class Context<TPayload, TLocalState, TError> : IWorkflowFeature<TPayload, TError>
+internal sealed class Context<TPayload, TLocalState, TError> : IRailwayFeature<TPayload, TError>
 {
 	/// <summary>
 	/// The condition that determines if this context should execute.
