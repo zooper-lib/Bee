@@ -14,7 +14,7 @@ namespace Zooper.Bee.Internal.Executors;
 internal class ContextExecutor<TPayload, TError> : IFeatureExecutor<TPayload, TError>
 {
 	/// <inheritdoc />
-	public bool CanExecute(Features.IWorkflowFeature<TPayload, TError> feature)
+	public bool CanExecute(Features.IRailwayFeature<TPayload, TError> feature)
 	{
 		if (feature == null)
 		{
@@ -33,7 +33,7 @@ internal class ContextExecutor<TPayload, TError> : IFeatureExecutor<TPayload, TE
 
 	/// <inheritdoc />
 	public async Task<Either<TError, TPayload>> Execute(
-		Features.IWorkflowFeature<TPayload, TError> feature,
+		Features.IRailwayFeature<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
@@ -109,7 +109,7 @@ internal class ContextExecutor<TPayload, TError> : IFeatureExecutor<TPayload, TE
 	/// <param name="cancellationToken">The cancellation token</param>
 	/// <returns>Either the error or the modified payload</returns>
 	private async Task<Either<TError, TPayload>> ExecuteTyped<TLocalState>(
-		Features.IWorkflowFeature<TPayload, TError> feature,
+		Features.IRailwayFeature<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{

@@ -9,7 +9,7 @@ namespace Zooper.Bee.Features.Parallel;
 /// </summary>
 /// <typeparam name="TPayload">Type of the main workflow payload</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class Parallel<TPayload, TError> : IWorkflowFeature<TPayload, TError>
+internal sealed class Parallel<TPayload, TError> : IRailwayFeature<TPayload, TError>
 {
 	/// <summary>
 	/// Parallel execution can have a condition, but typically runs unconditionally.

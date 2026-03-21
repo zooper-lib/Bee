@@ -3,19 +3,19 @@ using System;
 namespace Zooper.Bee.Internal;
 
 /// <summary>
-/// Represents a conditional step in the workflow that only executes if a condition is met.
+/// Represents a conditional step in the railway that only executes if a condition is met.
 /// </summary>
 /// <typeparam name="TPayload">Type of the payload</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class ConditionalWorkflowStep<TPayload, TError>
+internal sealed class ConditionalRailwayStep<TPayload, TError>
 {
 	private readonly Func<TPayload, bool> _condition;
 
-	public WorkflowStep<TPayload, TError> Activity { get; }
+	public RailwayStep<TPayload, TError> Activity { get; }
 
-	public ConditionalWorkflowStep(
+	public ConditionalRailwayStep(
 		Func<TPayload, bool> condition,
-		WorkflowStep<TPayload, TError> activity)
+		RailwayStep<TPayload, TError> activity)
 	{
 		_condition = condition;
 		Activity = activity;

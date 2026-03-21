@@ -6,13 +6,13 @@ using Zooper.Fox;
 
 namespace Zooper.Bee.Tests;
 
-public class WorkflowWithContextTests
+public class RailwayWithContextTests
 {
 	#region Test Models
 	// Request model
 	private record ProductRequest(int Id, string Name, decimal Price, bool NeedsCustomProcessing);
 
-	// Main workflow payload model
+	// Main railway payload model
 	private record ProductPayload(
 		int Id,
 		string Name,
@@ -45,7 +45,7 @@ public class WorkflowWithContextTests
 	public async Task WithContext_ExecutesWhenConditionIsTrue()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+		var workflow = new RailwayBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			// Create the main payload from the request
 			request => new ProductPayload(
 				request.Id,
@@ -146,7 +146,7 @@ public class WorkflowWithContextTests
 	public async Task WithContext_LocalPayloadIsolated_NotAffectedByOtherActivities()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+		var workflow = new RailwayBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
 				payload.Id, payload.Name, payload.FinalPrice,
@@ -234,7 +234,7 @@ public class WorkflowWithContextTests
 	public async Task WithContext_ErrorInContext_StopsExecutionAndReturnsError()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+		var workflow = new RailwayBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
 				payload.Id, payload.Name, payload.FinalPrice,
@@ -286,7 +286,7 @@ public class WorkflowWithContextTests
 	public async Task WithContext_MultipleActivitiesInSameContext_ShareLocalPayload()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+		var workflow = new RailwayBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
 				payload.Id, payload.Name, payload.FinalPrice,
@@ -367,7 +367,7 @@ public class WorkflowWithContextTests
 	public async Task WithContext_UnconditionalContext_AlwaysExecutes()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+		var workflow = new RailwayBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
 				payload.Id, payload.Name, payload.FinalPrice,
@@ -413,7 +413,7 @@ public class WorkflowWithContextTests
 	public async Task WithContext_UnconditionalContextFluentApi_AlwaysExecutes()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
+		var workflow = new RailwayBuilder<ProductRequest, ProductPayload, ProductResult, ProductError>(
 			request => new ProductPayload(request.Id, request.Name, request.Price, request.NeedsCustomProcessing),
 			payload => new ProductResult(
 				payload.Id, payload.Name, payload.FinalPrice,

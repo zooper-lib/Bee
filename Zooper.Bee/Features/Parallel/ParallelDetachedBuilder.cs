@@ -12,11 +12,11 @@ namespace Zooper.Bee.Features.Parallel;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly WorkflowBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
+	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly ParallelDetached<TPayload, TError> _parallelDetached;
 
 	internal ParallelDetachedBuilder(
-		WorkflowBuilder<TRequest, TPayload, TSuccess, TError> workflow,
+		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
 		ParallelDetached<TPayload, TError> parallelDetached)
 	{
 		_workflow = workflow;

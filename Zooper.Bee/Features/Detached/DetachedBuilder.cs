@@ -15,11 +15,11 @@ namespace Zooper.Bee.Features.Detached;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class DetachedBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly WorkflowBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
+	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly Detached<TPayload, TError> _detached;
 
 	internal DetachedBuilder(
-		WorkflowBuilder<TRequest, TPayload, TSuccess, TError> workflow,
+		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
 		Detached<TPayload, TError> detached)
 	{
 		_workflow = workflow;
@@ -34,7 +34,7 @@ public sealed class DetachedBuilder<TRequest, TPayload, TSuccess, TError>
 	public DetachedBuilder<TRequest, TPayload, TSuccess, TError> Do(
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_detached.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
+		_detached.Activities.Add(new RailwayStep<TPayload, TError>(activity));
 		return this;
 	}
 
@@ -46,7 +46,7 @@ public sealed class DetachedBuilder<TRequest, TPayload, TSuccess, TError>
 	public DetachedBuilder<TRequest, TPayload, TSuccess, TError> Do(
 		Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_detached.Activities.Add(new WorkflowStep<TPayload, TError>(
+		_detached.Activities.Add(new RailwayStep<TPayload, TError>(
 			(payload, _) => Task.FromResult(activity(payload))
 		));
 		return this;
@@ -62,7 +62,7 @@ public sealed class DetachedBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_detached.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
+			_detached.Activities.Add(new RailwayStep<TPayload, TError>(activity));
 		}
 		return this;
 	}
@@ -77,7 +77,7 @@ public sealed class DetachedBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_detached.Activities.Add(new WorkflowStep<TPayload, TError>(
+			_detached.Activities.Add(new RailwayStep<TPayload, TError>(
 				(payload, _) => Task.FromResult(activity(payload))
 			));
 		}

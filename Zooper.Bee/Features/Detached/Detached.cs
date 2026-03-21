@@ -9,7 +9,7 @@ namespace Zooper.Bee.Features.Detached;
 /// </summary>
 /// <typeparam name="TPayload">Type of the main workflow payload</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class Detached<TPayload, TError> : IWorkflowFeature<TPayload, TError>
+internal sealed class Detached<TPayload, TError> : IRailwayFeature<TPayload, TError>
 {
 	/// <summary>
 	/// The condition that determines if this detached group should execute.
@@ -24,7 +24,7 @@ internal sealed class Detached<TPayload, TError> : IWorkflowFeature<TPayload, TE
 	/// <summary>
 	/// The list of activities in this detached group.
 	/// </summary>
-	public List<WorkflowStep<TPayload, TError>> Activities { get; } = new();
+	public List<RailwayStep<TPayload, TError>> Activities { get; } = new();
 
 	/// <summary>
 	/// Creates a new detached group with an optional condition.

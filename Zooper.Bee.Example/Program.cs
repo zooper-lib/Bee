@@ -13,7 +13,7 @@ public class Program
 	// Error model
 	public record OrderError(string ErrorCode, string Message);
 
-	// Payload model to carry data through the workflow
+	// Payload model to carry data through the railway
 	public record OrderProcessingPayload(
 		int OrderId,
 		string CustomerName,
@@ -24,7 +24,7 @@ public class Program
 
 	public static async Task Main()
 	{
-		Console.WriteLine("=== Zooper.Bee Workflow Example ===\n");
+		Console.WriteLine("=== Zooper.Bee Railway Example ===\n");
 
 		// Create a valid order request
 		var validOrder = new OrderRequest(1001, "John Doe", 99.99m);
@@ -46,18 +46,18 @@ public class Program
 		// Run the parallel execution example
 		await ParallelExecutionExample.RunExample();
 
-		// Run the parameterless workflow example
-		await ParameterlessWorkflowExample.RunExample();
+		// Run the parameterless railway example
+		await ParameterlessRailwayExample.RunExample();
 	}
 
 	private static async Task ProcessOrder(OrderRequest request)
 	{
 		Console.WriteLine($"Processing order {request.OrderId} for {request.CustomerName}...");
 
-		// Create the workflow
-		var workflow = CreateOrderWorkflow();
+		// Create the railway
+		var workflow = CreateOrderRailway();
 
-		// Execute the workflow with the request
+		// Execute the railway with the request
 		var result = await workflow.Execute(request);
 
 		// Handle the result
@@ -75,9 +75,9 @@ public class Program
 		}
 	}
 
-	private static Workflow<OrderRequest, OrderConfirmation, OrderError> CreateOrderWorkflow()
+	private static Railway<OrderRequest, OrderConfirmation, OrderError> CreateOrderRailway()
 	{
-		return new WorkflowBuilder<OrderRequest, OrderProcessingPayload, OrderConfirmation, OrderError>(
+		return new RailwayBuilder<OrderRequest, OrderProcessingPayload, OrderConfirmation, OrderError>(
 			// Context factory: Create initial payload from request
 			request => new OrderProcessingPayload(
 				request.OrderId,

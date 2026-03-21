@@ -8,9 +8,9 @@
         <RepositoryUrl>https://github.com/zooper-lib/Bee</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>icon.png</PackageIcon>
-        <PackageTags>workflow;builder;pipeline;functional;either;C#</PackageTags>
+        <PackageTags>railway;workflow;builder;pipeline;functional;either;C#</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <Description>A .NET library for building robust, functional workflows and processing pipelines.</Description>
+        <Description>A .NET library for building robust, functional railways (processing pipelines) using railway-oriented programming.</Description>
 
         <!-- Version information -->
         <Version>3.4.0</Version>

@@ -6,9 +6,9 @@ using Zooper.Fox;
 namespace Zooper.Bee.Tests;
 
 /// <summary>
-/// Tests for the internal execution logic of workflows using end-to-end tests.
+/// Tests for the internal execution logic of railways using end-to-end tests.
 /// </summary>
-public class WorkflowInternalsTests
+public class RailwayInternalsTests
 {
 	#region Test Models
 	// Models for the tests
@@ -23,7 +23,7 @@ public class WorkflowInternalsTests
 	public async Task DynamicBranchExecution_ConditionTrue_ExecutesActivities()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			// Create the payload from the request
 			request => new TestPayload(request.Name, request.Value),
 
@@ -69,7 +69,7 @@ public class WorkflowInternalsTests
 	public async Task DynamicBranchExecution_ConditionFalse_SkipsActivities()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "No result")
 		)
@@ -111,7 +111,7 @@ public class WorkflowInternalsTests
 	public async Task DynamicBranchExecution_ActivityReturnsError_PropagatesError()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "No result")
 		)
@@ -147,7 +147,7 @@ public class WorkflowInternalsTests
 	public async Task DynamicBranchExecution_MultipleActivities_ExecutesInOrder()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "No result")
 		)
@@ -208,7 +208,7 @@ public class WorkflowInternalsTests
 	public async Task DynamicBranchExecution_MultipleBranches_ExecuteIndependently()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
 			request => new TestPayload(request.Name, request.Value),
 			payload => new TestSuccess(payload.Result ?? "No result")
 		)

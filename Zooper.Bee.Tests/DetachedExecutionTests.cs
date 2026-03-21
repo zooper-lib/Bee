@@ -37,7 +37,7 @@ public class DetachedExecutionTests
 		var syncObj = new object();
 		var backgroundTaskRan = false;
 
-		var workflow = new WorkflowBuilder<NotificationRequest, NotificationPayload, NotificationResult, NotificationError>(
+		var workflow = new RailwayBuilder<NotificationRequest, NotificationPayload, NotificationResult, NotificationError>(
 			request => new NotificationPayload(request.UserId, request.Message, request.IsUrgent),
 			payload => new NotificationResult(payload.UserId, payload.Status)
 		)
@@ -123,7 +123,7 @@ public class DetachedExecutionTests
 		var urgentTaskRan = false;
 		var regularTaskRan = false;
 
-		var workflow = new WorkflowBuilder<NotificationRequest, NotificationPayload, NotificationResult, NotificationError>(
+		var workflow = new RailwayBuilder<NotificationRequest, NotificationPayload, NotificationResult, NotificationError>(
 			request => new NotificationPayload(request.UserId, request.Message, request.IsUrgent),
 			payload => new NotificationResult(payload.UserId, payload.Status)
 		)
@@ -255,7 +255,7 @@ public class DetachedExecutionTests
 		var syncObj = new object();
 		var executionOrder = new List<string>();
 
-		var workflow = new WorkflowBuilder<NotificationRequest, NotificationPayload, NotificationResult, NotificationError>(
+		var workflow = new RailwayBuilder<NotificationRequest, NotificationPayload, NotificationResult, NotificationError>(
 			request => new NotificationPayload(request.UserId, request.Message, request.IsUrgent),
 			payload => new NotificationResult(payload.UserId, payload.Status)
 		)

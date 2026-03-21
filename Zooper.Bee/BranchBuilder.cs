@@ -11,11 +11,11 @@ namespace Zooper.Bee;
 /// </summary>
 public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly WorkflowBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
+	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly Branch<TPayload, TError> _branch;
 
 	internal BranchBuilder(
-		WorkflowBuilder<TRequest, TPayload, TSuccess, TError> workflow,
+		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
 		Branch<TPayload, TError> branch)
 	{
 		_workflow = workflow;
@@ -29,7 +29,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	/// <returns>The branch builder for fluent chaining</returns>
 	public BranchBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_branch.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
+		_branch.Activities.Add(new RailwayStep<TPayload, TError>(activity));
 		return this;
 	}
 
@@ -40,7 +40,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	/// <returns>The branch builder for fluent chaining</returns>
 	public BranchBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_branch.Activities.Add(new WorkflowStep<TPayload, TError>((payload, _) =>
+		_branch.Activities.Add(new RailwayStep<TPayload, TError>((payload, _) =>
 			Task.FromResult(activity(payload))
 		));
 		return this;
@@ -55,7 +55,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_branch.Activities.Add(new WorkflowStep<TPayload, TError>(activity));
+			_branch.Activities.Add(new RailwayStep<TPayload, TError>(activity));
 		}
 		return this;
 	}
@@ -69,7 +69,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_branch.Activities.Add(new WorkflowStep<TPayload, TError>((payload, _) =>
+			_branch.Activities.Add(new RailwayStep<TPayload, TError>((payload, _) =>
 				Task.FromResult(activity(payload))
 			));
 		}
@@ -81,7 +81,7 @@ public sealed class BranchBuilder<TRequest, TPayload, TSuccess, TError>
 	/// </summary>
 	/// <returns>The main workflow builder</returns>
 	[Obsolete("EndBranch is deprecated. Use the new callback-style Branch method instead: .Branch(condition, branch => branch.Do(...))")]
-	public WorkflowBuilder<TRequest, TPayload, TSuccess, TError> EndBranch()
+	public RailwayBuilder<TRequest, TPayload, TSuccess, TError> EndBranch()
 	{
 		return _workflow;
 	}
