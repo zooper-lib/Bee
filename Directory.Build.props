@@ -13,7 +13,7 @@
         <Description>A .NET library for building robust, functional railways (processing pipelines) using railway-oriented programming.</Description>
 
         <!-- Version information -->
-        <Version>3.4.0</Version>
+        <Version>3.4.1</Version>
 
         <!-- Source linking -->
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
