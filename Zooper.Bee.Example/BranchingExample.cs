@@ -30,15 +30,15 @@ public class BranchingExample
 
 	public static async Task RunExample()
 	{
-		Console.WriteLine("\n=== Workflow Grouping Example ===\n");
+		Console.WriteLine("\n=== Railway Grouping Example ===\n");
 
 		// Create sample requests
 		var standardUserRequest = new RegistrationRequest("user@example.com", "Password123!", false);
 		var vipUserRequest = new RegistrationRequest("vip@example.com", "VIPPassword123!", true);
 		var invalidEmailRequest = new RegistrationRequest("invalid-email", "Password123!", false);
 
-		// Build the registration workflow
-		var workflow = CreateRegistrationWorkflow();
+		// Build the registration railway
+		var workflow = CreateRegistrationRailway();
 
 		// Process standard user registration
 		Console.WriteLine("Registering standard user:");
@@ -58,7 +58,7 @@ public class BranchingExample
 	}
 
 	private static async Task ProcessRegistration(
-		Workflow<RegistrationRequest, RegistrationSuccess, RegistrationError> workflow,
+		Railway<RegistrationRequest, RegistrationSuccess, RegistrationError> workflow,
 		RegistrationRequest request)
 	{
 		var result = await workflow.Execute(request);
@@ -82,9 +82,9 @@ public class BranchingExample
 		}
 	}
 
-	private static Workflow<RegistrationRequest, RegistrationSuccess, RegistrationError> CreateRegistrationWorkflow()
+	private static Railway<RegistrationRequest, RegistrationSuccess, RegistrationError> CreateRegistrationRailway()
 	{
-		return new WorkflowBuilder<RegistrationRequest, RegistrationPayload, RegistrationSuccess, RegistrationError>(
+		return new RailwayBuilder<RegistrationRequest, RegistrationPayload, RegistrationSuccess, RegistrationError>(
 			// Create initial payload from request
 			request => new RegistrationPayload(
 				Guid.NewGuid(),  // Generate a new unique ID

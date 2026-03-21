@@ -4,44 +4,48 @@ using Zooper.Fox;
 namespace Zooper.Bee;
 
 /// <summary>
-/// Provides factory methods for creating workflows without requiring a request parameter.
+/// Provides factory methods for creating railways without requiring a request parameter.
 /// </summary>
-[Obsolete("Use RailwayBuilderFactory instead. This class will be removed in a future version.")]
-public static class WorkflowBuilderFactory
+public static class RailwayBuilderFactory
 {
 	/// <summary>
-	/// Creates a new workflow builder that doesn't require a request parameter.
+	/// Creates a new railway builder that doesn't require a request parameter.
 	/// </summary>
-	/// <typeparam name="TPayload">The type of payload that will be used throughout the workflow</typeparam>
+	/// <typeparam name="TPayload">The type of payload that will be used throughout the railway</typeparam>
 	/// <typeparam name="TSuccess">The type of the success result</typeparam>
 	/// <typeparam name="TError">The type of the error result</typeparam>
 	/// <param name="payloadFactory">A factory function that creates the initial payload</param>
 	/// <param name="resultSelector">A function that creates the success result from the final payload</param>
 	/// <returns>A railway builder instance</returns>
-	[Obsolete("Use RailwayBuilderFactory.Create instead. This method will be removed in a future version.")]
 	public static RailwayBuilder<Unit, TPayload, TSuccess, TError> Create<TPayload, TSuccess, TError>(
 		Func<TPayload> payloadFactory,
 		Func<TPayload, TSuccess> resultSelector)
 	{
-		return RailwayBuilderFactory.Create<TPayload, TSuccess, TError>(payloadFactory, resultSelector);
+		return new RailwayBuilder<Unit, TPayload, TSuccess, TError>(
+			_ => payloadFactory(),
+			resultSelector);
 	}
 
 	/// <summary>
-	/// Creates a new workflow that doesn't require a request parameter.
+	/// Creates a new railway that doesn't require a request parameter.
 	/// </summary>
-	/// <typeparam name="TPayload">The type of payload that will be used throughout the workflow</typeparam>
+	/// <typeparam name="TPayload">The type of payload that will be used throughout the railway</typeparam>
 	/// <typeparam name="TSuccess">The type of the success result</typeparam>
 	/// <typeparam name="TError">The type of the error result</typeparam>
 	/// <param name="payloadFactory">A factory function that creates the initial payload</param>
 	/// <param name="resultSelector">A function that creates the success result from the final payload</param>
-	/// <param name="configure">An action that configures the workflow</param>
+	/// <param name="configure">An action that configures the railway</param>
 	/// <returns>A railway instance</returns>
-	[Obsolete("Use RailwayBuilderFactory.CreateRailway instead. This method will be removed in a future version.")]
-	public static Railway<Unit, TSuccess, TError> CreateWorkflow<TPayload, TSuccess, TError>(
+	public static Railway<Unit, TSuccess, TError> CreateRailway<TPayload, TSuccess, TError>(
 		Func<TPayload> payloadFactory,
 		Func<TPayload, TSuccess> resultSelector,
 		Action<RailwayBuilder<Unit, TPayload, TSuccess, TError>> configure)
 	{
-		return RailwayBuilderFactory.CreateRailway<TPayload, TSuccess, TError>(payloadFactory, resultSelector, configure);
+		var builder = new RailwayBuilder<Unit, TPayload, TSuccess, TError>(
+			_ => payloadFactory(),
+			resultSelector);
+
+		configure(builder);
+		return builder.Build();
 	}
 }

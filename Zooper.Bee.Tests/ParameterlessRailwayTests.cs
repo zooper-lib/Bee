@@ -7,7 +7,7 @@ using Zooper.Bee.Extensions;
 
 namespace Zooper.Bee.Tests;
 
-public class ParameterlessWorkflowTests
+public class ParameterlessRailwayTests
 {
 	#region Test Models
 
@@ -23,10 +23,10 @@ public class ParameterlessWorkflowTests
 	#endregion
 
 	[Fact]
-	public async Task ParameterlessWorkflow_UsingUnitType_CanBeExecuted()
+	public async Task ParameterlessRailway_UsingUnitType_CanBeExecuted()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<Unit, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<Unit, TestPayload, TestSuccess, TestError>(
 				// Convert Unit to initial payload
 				_ => new TestPayload(DateTime.UtcNow),
 
@@ -59,17 +59,17 @@ public class ParameterlessWorkflowTests
 	}
 
 	[Fact]
-	public async Task ParameterlessWorkflow_UsingFactory_CanBeExecuted()
+	public async Task ParameterlessRailway_UsingFactory_CanBeExecuted()
 	{
 		// Arrange
-		var workflow = WorkflowBuilderFactory.CreateWorkflow<TestPayload, TestSuccess, TestError>(
+		var workflow = RailwayBuilderFactory.CreateRailway<TestPayload, TestSuccess, TestError>(
 			// Initial payload factory
 			() => new TestPayload(DateTime.UtcNow),
 
 			// Result selector
 			payload => new TestSuccess(payload.Status, true),
 
-			// Configure the workflow
+			// Configure the railway
 			builder => builder
 				.Do(payload => Either<TestError, TestPayload>.FromRight(
 						payload with
@@ -97,10 +97,10 @@ public class ParameterlessWorkflowTests
 	}
 
 	[Fact]
-	public async Task ParameterlessWorkflow_UsingExtensionMethod_CanBeExecuted()
+	public async Task ParameterlessRailway_UsingExtensionMethod_CanBeExecuted()
 	{
 		// Arrange
-		var workflow = new WorkflowBuilder<Unit, TestPayload, TestSuccess, TestError>(
+		var workflow = new RailwayBuilder<Unit, TestPayload, TestSuccess, TestError>(
 				_ => new TestPayload(DateTime.UtcNow),
 				payload => new TestSuccess(payload.Status, true)
 			)
@@ -130,10 +130,10 @@ public class ParameterlessWorkflowTests
 	}
 
 	[Fact]
-	public async Task ParameterlessWorkflow_WithError_ReturnsError()
+	public async Task ParameterlessRailway_WithError_ReturnsError()
 	{
 		// Arrange
-		var workflow = WorkflowBuilderFactory.Create<TestPayload, TestSuccess, TestError>(
+		var workflow = RailwayBuilderFactory.Create<TestPayload, TestSuccess, TestError>(
 				() => new TestPayload(DateTime.UtcNow),
 				payload => new TestSuccess(payload.Status, true)
 			)
@@ -146,7 +146,7 @@ public class ParameterlessWorkflowTests
 			)
 			.Do(payload =>
 				{
-					// Simulate an error in the workflow
+					// Simulate an error in the railway
 					return Either<TestError, TestPayload>.FromLeft(
 						new TestError("PROCESSING_FAILED", "Failed to complete processing")
 					);

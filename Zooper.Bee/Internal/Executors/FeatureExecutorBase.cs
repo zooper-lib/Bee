@@ -12,17 +12,17 @@ namespace Zooper.Bee.Internal.Executors;
 /// <typeparam name="TError">The type of the error</typeparam>
 /// <typeparam name="TFeature">The specific type of feature this executor handles</typeparam>
 internal abstract class FeatureExecutorBase<TPayload, TError, TFeature> : IFeatureExecutor<TPayload, TError>
-	where TFeature : IWorkflowFeature<TPayload, TError>
+	where TFeature : IRailwayFeature<TPayload, TError>
 {
 	/// <inheritdoc />
-	public bool CanExecute(IWorkflowFeature<TPayload, TError> feature)
+	public bool CanExecute(IRailwayFeature<TPayload, TError> feature)
 	{
 		return feature is TFeature;
 	}
 
 	/// <inheritdoc />
 	public async Task<Either<TError, TPayload>> Execute(
-		IWorkflowFeature<TPayload, TError> feature,
+		IRailwayFeature<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{

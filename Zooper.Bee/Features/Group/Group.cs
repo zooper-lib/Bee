@@ -9,7 +9,7 @@ namespace Zooper.Bee.Features.Group;
 /// </summary>
 /// <typeparam name="TPayload">Type of the main workflow payload</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class Group<TPayload, TError> : IWorkflowFeature<TPayload, TError>
+internal sealed class Group<TPayload, TError> : IRailwayFeature<TPayload, TError>
 {
 	/// <summary>
 	/// The condition that determines if this group should execute.
@@ -24,7 +24,7 @@ internal sealed class Group<TPayload, TError> : IWorkflowFeature<TPayload, TErro
 	/// <summary>
 	/// The list of activities in this group.
 	/// </summary>
-	public List<WorkflowStep<TPayload, TError>> Activities { get; } = new();
+	public List<RailwayStep<TPayload, TError>> Activities { get; } = new();
 
 	/// <summary>
 	/// Creates a new group with an optional condition.

@@ -10,12 +10,12 @@ namespace Zooper.Bee.Internal;
 /// </summary>
 /// <typeparam name="TRequest">Type of the request</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class WorkflowValidation<TRequest, TError>
+internal sealed class RailwayValidation<TRequest, TError>
 {
 	private readonly Func<TRequest, CancellationToken, Task<Option<TError>>> _validation;
 	private readonly string? _name;
 
-	public WorkflowValidation(
+	public RailwayValidation(
 		Func<TRequest, CancellationToken, Task<Option<TError>>> validation,
 		string? name = null)
 	{

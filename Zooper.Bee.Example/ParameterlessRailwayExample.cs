@@ -5,7 +5,7 @@ using Zooper.Bee.Extensions;
 
 namespace Zooper.Bee.Example;
 
-public sealed class ParameterlessWorkflowExample
+public sealed class ParameterlessRailwayExample
 {
 	// Success model
 	public record ProcessingResult(DateTime ProcessedAt, string Status);
@@ -21,9 +21,9 @@ public sealed class ParameterlessWorkflowExample
 
 	public static async Task RunExample()
 	{
-		Console.WriteLine("\n=== Parameterless Workflow Example ===\n");
+		Console.WriteLine("\n=== Parameterless Railway Example ===\n");
 
-		Console.WriteLine("Example 1: Using WorkflowBuilderFactory.Create");
+		Console.WriteLine("Example 1: Using RailwayBuilderFactory.Create");
 		await RunExampleWithFactory();
 
 		Console.WriteLine("\nExample 2: Using Unit type directly");
@@ -35,15 +35,15 @@ public sealed class ParameterlessWorkflowExample
 
 	private static async Task RunExampleWithFactory()
 	{
-		// Create a workflow that doesn't need input parameters
-		var workflow = WorkflowBuilderFactory.CreateWorkflow<ProcessingPayload, ProcessingResult, ProcessingError>(
+		// Create a railway that doesn't need input parameters
+		var workflow = RailwayBuilderFactory.CreateRailway<ProcessingPayload, ProcessingResult, ProcessingError>(
 			// Initial payload factory - no parameters needed
 			() => new ProcessingPayload(StartedAt: DateTime.UtcNow),
 
 			// Result selector - convert final payload to success result
 			payload => new ProcessingResult(DateTime.UtcNow, payload.Status),
 
-			// Configure the workflow
+			// Configure the railway
 			builder => builder
 				.Do(payload =>
 					{
@@ -75,19 +75,19 @@ public sealed class ParameterlessWorkflowExample
 
 		if (result.IsRight)
 		{
-			Console.WriteLine($"Workflow completed successfully: {result.Right.Status}");
+			Console.WriteLine($"Railway completed successfully: {result.Right.Status}");
 			Console.WriteLine($"Processed at: {result.Right.ProcessedAt}");
 		}
 		else
 		{
-			Console.WriteLine($"Workflow failed: [{result.Left.Code}] {result.Left.Message}");
+			Console.WriteLine($"Railway failed: [{result.Left.Code}] {result.Left.Message}");
 		}
 	}
 
 	private static async Task RunExampleWithUnit()
 	{
-		// Create a workflow with Unit type as request
-		var workflow = new WorkflowBuilder<Unit, ProcessingPayload, ProcessingResult, ProcessingError>(
+		// Create a railway with Unit type as request
+		var workflow = new RailwayBuilder<Unit, ProcessingPayload, ProcessingResult, ProcessingError>(
 				// Use Unit parameter (ignored)
 				_ => new ProcessingPayload(StartedAt: DateTime.UtcNow),
 
@@ -124,19 +124,19 @@ public sealed class ParameterlessWorkflowExample
 
 		if (result.IsRight)
 		{
-			Console.WriteLine($"Workflow completed successfully: {result.Right.Status}");
+			Console.WriteLine($"Railway completed successfully: {result.Right.Status}");
 			Console.WriteLine($"Processed at: {result.Right.ProcessedAt}");
 		}
 		else
 		{
-			Console.WriteLine($"Workflow failed: [{result.Left.Code}] {result.Left.Message}");
+			Console.WriteLine($"Railway failed: [{result.Left.Code}] {result.Left.Message}");
 		}
 	}
 
 	private static async Task RunExampleWithExtension()
 	{
-		// Create a workflow with Unit type as request
-		var workflow = new WorkflowBuilder<Unit, ProcessingPayload, ProcessingResult, ProcessingError>(
+		// Create a railway with Unit type as request
+		var workflow = new RailwayBuilder<Unit, ProcessingPayload, ProcessingResult, ProcessingError>(
 				// Use Unit parameter (ignored)
 				_ => new ProcessingPayload(StartedAt: DateTime.UtcNow),
 
@@ -173,12 +173,12 @@ public sealed class ParameterlessWorkflowExample
 
 		if (result.IsRight)
 		{
-			Console.WriteLine($"Workflow completed successfully: {result.Right.Status}");
+			Console.WriteLine($"Railway completed successfully: {result.Right.Status}");
 			Console.WriteLine($"Processed at: {result.Right.ProcessedAt}");
 		}
 		else
 		{
-			Console.WriteLine($"Workflow failed: [{result.Left.Code}] {result.Left.Message}");
+			Console.WriteLine($"Railway failed: [{result.Left.Code}] {result.Left.Message}");
 		}
 	}
 }

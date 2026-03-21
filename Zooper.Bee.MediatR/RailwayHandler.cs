@@ -9,14 +9,13 @@ using Zooper.Fox;
 namespace Zooper.Bee.MediatR;
 
 /// <summary>
-/// Base class for workflow handlers that process requests through MediatR
+/// Base class for railway handlers that process requests through MediatR
 /// </summary>
 /// <typeparam name="TRequest">The request type</typeparam>
-/// <typeparam name="TPayload">The internal workflow payload type</typeparam>
+/// <typeparam name="TPayload">The internal railway payload type</typeparam>
 /// <typeparam name="TSuccess">The success result type</typeparam>
 /// <typeparam name="TError">The error result type</typeparam>
-[Obsolete("Use RailwayHandler<TRequest, TPayload, TSuccess, TError> instead. This class will be removed in a future version.")]
-public abstract class WorkflowHandler<TRequest, TPayload, TSuccess, TError>
+public abstract class RailwayHandler<TRequest, TPayload, TSuccess, TError>
 	: IRequestHandler<TRequest, Either<TError, TSuccess>>
 	where TRequest : IRequest<Either<TError, TSuccess>>
 {
@@ -31,11 +30,10 @@ public abstract class WorkflowHandler<TRequest, TPayload, TSuccess, TError>
 	protected abstract Func<TPayload, TSuccess> ResultSelector { get; }
 
 	/// <summary>
-	/// Configures the workflow using the provided builder.
+	/// Configures the railway using the provided builder.
 	/// </summary>
-	/// <param name="builder">The workflow builder to configure</param>
-	[Obsolete("Use ConfigureRailway on RailwayHandler instead. This method will be removed in a future version.")]
-	protected abstract void ConfigureWorkflow(RailwayBuilder<TRequest, TPayload, TSuccess, TError> builder);
+	/// <param name="builder">The railway builder to configure</param>
+	protected abstract void ConfigureRailway(RailwayBuilder<TRequest, TPayload, TSuccess, TError> builder);
 
 	/// <summary>
 	/// Handles the request and returns the result.
@@ -47,24 +45,23 @@ public abstract class WorkflowHandler<TRequest, TPayload, TSuccess, TError>
 		TRequest request,
 		CancellationToken cancellationToken)
 	{
-		var railway = CreateWorkflow();
+		var railway = CreateRailway();
 		return await railway.Execute(request, cancellationToken);
 	}
 
 	/// <summary>
-	/// Creates the workflow instance.
+	/// Creates the railway instance.
 	/// </summary>
 	/// <returns>The configured railway</returns>
 	// ReSharper disable once MemberCanBePrivate.Global
-	[Obsolete("Use CreateRailway on RailwayHandler instead. This method will be removed in a future version.")]
-	protected Railway<TRequest, TSuccess, TError> CreateWorkflow()
+	protected Railway<TRequest, TSuccess, TError> CreateRailway()
 	{
 		var builder = new RailwayBuilder<TRequest, TPayload, TSuccess, TError>(
 			PayloadFactory,
 			ResultSelector
 		);
 
-		ConfigureWorkflow(builder);
+		ConfigureRailway(builder);
 
 		return builder.Build();
 	}

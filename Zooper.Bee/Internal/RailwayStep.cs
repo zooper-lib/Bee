@@ -6,16 +6,16 @@ using Zooper.Fox;
 namespace Zooper.Bee.Internal;
 
 /// <summary>
-/// Represents a step in the workflow that operates on a payload.
+/// Represents a step in the railway that operates on a payload.
 /// </summary>
 /// <typeparam name="TPayload">Type of the payload</typeparam>
 /// <typeparam name="TError">Type of the error</typeparam>
-internal sealed class WorkflowStep<TPayload, TError>
+internal sealed class RailwayStep<TPayload, TError>
 {
 	private readonly Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> _activity;
 	private readonly string? _name;
 
-	public WorkflowStep(
+	public RailwayStep(
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity,
 		string? name = null)
 	{

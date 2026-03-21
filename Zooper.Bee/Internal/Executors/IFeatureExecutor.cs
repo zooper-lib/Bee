@@ -17,7 +17,7 @@ internal interface IFeatureExecutor<TPayload, TError>
 	/// </summary>
 	/// <param name="feature">The feature to check</param>
 	/// <returns>True if this executor can handle the feature, false otherwise</returns>
-	bool CanExecute(IWorkflowFeature<TPayload, TError> feature);
+	bool CanExecute(IRailwayFeature<TPayload, TError> feature);
 
 	/// <summary>
 	/// Executes the feature with the given payload
@@ -27,7 +27,7 @@ internal interface IFeatureExecutor<TPayload, TError>
 	/// <param name="cancellationToken">The cancellation token</param>
 	/// <returns>Either the error or the modified payload</returns>
 	Task<Either<TError, TPayload>> Execute(
-		IWorkflowFeature<TPayload, TError> feature,
+		IRailwayFeature<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken);
 }

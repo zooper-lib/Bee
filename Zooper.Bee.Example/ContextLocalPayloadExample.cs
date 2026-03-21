@@ -21,7 +21,7 @@ public class ContextLocalPayloadExample
 	// Error model
 	public record OrderError(string Code, string Message);
 
-	// Main workflow payload model
+	// Main railway payload model
 	public record OrderPayload(
 		int OrderId,
 		string CustomerName,
@@ -40,14 +40,14 @@ public class ContextLocalPayloadExample
 
 	public static async Task RunExample()
 	{
-		Console.WriteLine("\n=== Workflow With Context Local Payload Example ===\n");
+		Console.WriteLine("\n=== Railway With Context Local Payload Example ===\n");
 
 		// Create sample requests
 		var standardOrder = new OrderRequest(2001, "Alice Johnson", 75.00m, false);
 		var shippingOrder = new OrderRequest(2002, "Bob Smith", 120.00m, true);
 
-		// Build the order processing workflow
-		var workflow = CreateOrderWorkflow();
+		// Build the order processing railway
+		var workflow = CreateOrderRailway();
 
 		// Process the standard order (no shipping)
 		Console.WriteLine("Processing standard order (no shipping):");
@@ -61,7 +61,7 @@ public class ContextLocalPayloadExample
 	}
 
 	private static async Task ProcessOrder(
-		Workflow<OrderRequest, OrderConfirmation, OrderError> workflow,
+		Railway<OrderRequest, OrderConfirmation, OrderError> workflow,
 		OrderRequest request)
 	{
 		var result = await workflow.Execute(request);
@@ -89,9 +89,9 @@ public class ContextLocalPayloadExample
 		}
 	}
 
-	private static Workflow<OrderRequest, OrderConfirmation, OrderError> CreateOrderWorkflow()
+	private static Railway<OrderRequest, OrderConfirmation, OrderError> CreateOrderRailway()
 	{
-		return new WorkflowBuilder<OrderRequest, OrderPayload, OrderConfirmation, OrderError>(
+		return new RailwayBuilder<OrderRequest, OrderPayload, OrderConfirmation, OrderError>(
 			// Create initial payload from request
 			request => new OrderPayload(
 				request.OrderId,
