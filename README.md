@@ -32,28 +32,27 @@ dotnet add package Zooper.Bee
 
 ```csharp
 // Define a simple railway
-var railway = new RailwayBuilder<Request, Payload, SuccessResult, ErrorResult>(
+var railway = Railway.Create<Request, Payload, SuccessResult, ErrorResult>(
     // Factory function that creates the initial payload from the request
-    request => new Payload { Data = request.Data },
+    factory:  request => new Payload { Data = request.Data },
 
     // Selector function that creates the success result from the final payload
-    payload => new SuccessResult { ProcessedData = payload.Data }
-)
-.Validate(request =>
-{
-    // Validate the request
-    if (string.IsNullOrEmpty(request.Data))
-        return Option<ErrorResult>.Some(new ErrorResult { Message = "Data is required" });
+    selector: payload => new SuccessResult { ProcessedData = payload.Data },
 
-    return Option<ErrorResult>.None;
-})
-.Do(payload =>
-{
-    // Process the payload
-    payload.Data = payload.Data.ToUpper();
-    return Either<ErrorResult, Payload>.FromRight(payload);
-})
-.Build();
+    // Step execution phase
+    steps: s => s
+        .Validate(request =>
+        {
+            if (string.IsNullOrEmpty(request.Data))
+                return Option<ErrorResult>.Some(new ErrorResult { Message = "Data is required" });
+            return Option<ErrorResult>.None;
+        })
+        .Do(payload =>
+        {
+            payload.Data = payload.Data.ToUpper();
+            return Either<ErrorResult, Payload>.FromRight(payload);
+        })
+);
 
 // Execute the railway
 var result = await railway.Execute(new Request { Data = "hello world" }, CancellationToken.None);
@@ -69,9 +68,45 @@ else
 
 ## Building Railways
 
+Railways are created with `Railway.Create()`, which takes two separate configuration lambdas:
+
+- **`guards`** — optional; declares guards and validations that run before the payload is created
+- **`steps`** — required; declares all activities that transform the payload
+
+This two-phase separation makes it structurally impossible to mix guard registration with step
+registration. `Guard()` and `Validate()` are not available inside `steps`, and `Do()`/`Group()`/etc.
+are not available inside `guards`.
+
+```csharp
+var railway = Railway.Create<Request, Payload, Success, Error>(
+    factory:  request => new Payload(request),
+    selector: payload => new Success(payload.Result),
+    guards: g => g
+        .Guard(request => /* auth check */)
+        .Validate(request => /* input validation */),
+    steps: s => s
+        .Do(payload => /* step 1 */)
+        .Group(null, g => g
+            .Do(payload => /* step 2a */)
+            .Do(payload => /* step 2b */))
+        .Do(payload => /* step 3 */)
+);
+```
+
+When no guards are needed, omit the `guards` parameter:
+
+```csharp
+var railway = Railway.Create<Request, Payload, Success, Error>(
+    factory:  request => new Payload(request),
+    selector: payload => new Success(payload.Result),
+    steps: s => s
+        .Do(payload => /* ... */)
+);
+```
+
 ### Validation
 
-Validates the incoming request before processing begins.
+Validations run before any step and reject the request early when invalid.
 
 ```csharp
 // Asynchronous validation
@@ -91,31 +126,36 @@ Validates the incoming request before processing begins.
 
 ### Guards
 
-Guards allow you to define checks that run before a railway begins execution. They're ideal for authentication,
-authorization, account validation, or any other requirement that must be satisfied before a railway can proceed.
+Guards check whether the railway is allowed to execute at all — authentication,
+authorization, feature flags, etc. They always run before any step, regardless of
+where they appear in the `guards` lambda.
 
 ```csharp
-// Asynchronous guard
-.Guard(async (request, cancellationToken) =>
-{
-    var isAuthorized = await CheckAuthorizationAsync(request, cancellationToken);
-    return isAuthorized ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
-})
-
-// Synchronous guard
-.Guard(request =>
-{
-    var isAuthorized = CheckAuthorization(request);
-    return isAuthorized ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
-})
+guards: g => g
+    // Asynchronous guard
+    .Guard(async (request, cancellationToken) =>
+    {
+        var isAuthorized = await CheckAuthorizationAsync(request, cancellationToken);
+        return isAuthorized
+            ? Either<ErrorResult, Unit>.FromRight(Unit.Value)
+            : Either<ErrorResult, Unit>.FromLeft(new ErrorResult { Message = "Unauthorized" });
+    })
+    // Synchronous guard
+    .Guard(request =>
+    {
+        var isAuthorized = CheckAuthorization(request);
+        return isAuthorized
+            ? Either<ErrorResult, Unit>.FromRight(Unit.Value)
+            : Either<ErrorResult, Unit>.FromLeft(new ErrorResult { Message = "Unauthorized" });
+    })
 ```
 
 #### Benefits of Guards
 
-- Guards run before creating the railway context, providing early validation
-- They provide a clear separation between "can this railway run?" and the actual railway logic
+- Guards run before the payload is created, providing the earliest possible short-circuit
+- The `guards` phase is structurally separate from the `steps` phase — it is impossible to
+  accidentally register a guard after a step
 - Common checks like authentication can be standardized and reused
-- Failures short-circuit the railway, preventing unnecessary work
 
 ### Activities
 
@@ -348,6 +388,38 @@ services.AddRailways(lifetime: ServiceLifetime.Singleton);
 5. Use `Finally` for cleanup operations
 6. Validate requests early to fail fast
 7. Use contextual state to avoid passing too many parameters
+
+## Migration from `RailwayBuilder` to `Railway.Create()`
+
+As of the latest version, `RailwayBuilder` and `RailwayBuilderFactory` are `[Obsolete]`.
+Use `Railway.Create()` instead.
+
+### Before
+
+```csharp
+var railway = new RailwayBuilder<Request, Payload, Success, Error>(
+        request => new Payload(request),
+        payload => new Success(payload.Result))
+    .Guard(request => /* ... */)
+    .Validate(request => /* ... */)
+    .Do(payload => /* ... */)
+    .Group(null, g => g.Do(payload => /* ... */))
+    .Build();
+```
+
+### After
+
+```csharp
+var railway = Railway.Create<Request, Payload, Success, Error>(
+    factory:  request => new Payload(request),
+    selector: payload => new Success(payload.Result),
+    guards: g => g
+        .Guard(request => /* ... */)
+        .Validate(request => /* ... */),
+    steps: s => s
+        .Do(payload => /* ... */)
+        .Group(null, g => g.Do(payload => /* ... */)));
+```
 
 ## Migration from Workflow to Railway
 

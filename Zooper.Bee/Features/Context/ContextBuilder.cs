@@ -15,14 +15,10 @@ namespace Zooper.Bee.Features.Context;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>
 {
-	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly Context<TPayload, TLocalState, TError> _context;
 
-	internal ContextBuilder(
-		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
-		Context<TPayload, TLocalState, TError> context)
+	internal ContextBuilder(Context<TPayload, TLocalState, TError> context)
 	{
-		_workflow = workflow;
 		_context = context;
 	}
 

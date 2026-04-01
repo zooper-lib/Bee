@@ -225,7 +225,7 @@ public class RailwayWithContextTests
 
 		// Assert
 		result.IsRight.Should().BeTrue();
-		result.Right.ProcessingResult.Should().Be("Initial processing -> Main activity -> Context 1 -> Context 2");
+		result.Right.ProcessingResult.Should().Be("Initial processing -> Context 1 -> Main activity -> Context 2");
 		result.Right.FinalPrice.Should().Be(130.00m); // 100 + 10 + 20
 		result.Right.CustomizationDetails.Should().Be("Context 1 customization + Context 2 customization");
 	}

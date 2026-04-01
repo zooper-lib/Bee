@@ -15,14 +15,10 @@ namespace Zooper.Bee.Features.Detached;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class DetachedBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly Detached<TPayload, TError> _detached;
 
-	internal DetachedBuilder(
-		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
-		Detached<TPayload, TError> detached)
+	internal DetachedBuilder(Detached<TPayload, TError> detached)
 	{
-		_workflow = workflow;
 		_detached = detached;
 	}
 

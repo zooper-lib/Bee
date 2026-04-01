@@ -24,6 +24,7 @@ namespace Zooper.Bee;
 /// <remarks>
 /// Initializes a new instance of the <see cref="RailwayBuilder{TRequest, TPayload, TSuccess, TError}"/> class.
 /// </remarks>
+[Obsolete("Use Railway.Create() instead, which enforces a clear separation between the guard/validation phase and the step execution phase.")]
 public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 {
 	private readonly Func<TRequest, TPayload> _contextFactory;
@@ -31,14 +32,11 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 
 	private readonly List<RailwayGuard<TRequest, TError>> _guards = [];
 	private readonly List<RailwayValidation<TRequest, TError>> _validations = [];
-	private readonly List<RailwayStep<TPayload, TError>> _activities = [];
-	private readonly List<ConditionalRailwayStep<TPayload, TError>> _conditionalActivities = [];
+	private readonly List<Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>>> _steps = [];
+	private readonly FeatureExecutorFactory<TPayload, TError> _featureExecutorFactory = new();
 	private readonly List<RailwayStep<TPayload, TError>> _finallyActivities = [];
 	private readonly List<Branch<TPayload, TError>> _branches = [];
 	private readonly List<object> _branchesWithLocalPayload = [];
-
-	// Collections for new features
-	private readonly List<IRailwayFeature<TPayload, TError>> _features = [];
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="RailwayBuilder{TRequest, TPayload, TSuccess, TError}"/> class.
@@ -125,7 +123,7 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 	public RailwayBuilder<TRequest, TPayload, TSuccess, TError> Do(
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_activities.Add(new(activity));
+		_steps.Add(activity);
 		return this;
 	}
 
@@ -136,12 +134,7 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 	/// <returns>The builder instance for method chaining</returns>
 	public RailwayBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_activities.Add(
-			new((
-					payload,
-					_) => Task.FromResult(activity(payload))
-			)
-		);
+		_steps.Add((payload, _) => Task.FromResult(activity(payload)));
 		return this;
 	}
 
@@ -155,7 +148,7 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_activities.Add(new(activity));
+			_steps.Add(activity);
 		}
 
 		return this;
@@ -170,12 +163,7 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 	{
 		foreach (var activity in activities)
 		{
-			_activities.Add(
-				new((
-						payload,
-						_) => Task.FromResult(activity(payload))
-				)
-			);
+			_steps.Add((payload, _) => Task.FromResult(activity(payload)));
 		}
 
 		return this;
@@ -191,12 +179,10 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Func<TPayload, bool> condition,
 		Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
 	{
-		_conditionalActivities.Add(
-			new(
-				condition,
-				new(activity)
-			)
-		);
+		_steps.Add((payload, ct) =>
+			condition(payload)
+				? activity(payload, ct)
+				: Task.FromResult(Either<TError, TPayload>.FromRight(payload)));
 		return this;
 	}
 
@@ -210,15 +196,10 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Func<TPayload, bool> condition,
 		Func<TPayload, Either<TError, TPayload>> activity)
 	{
-		_conditionalActivities.Add(
-			new(
-				condition,
-				new((
-						payload,
-						_) => Task.FromResult(activity(payload))
-				)
-			)
-		);
+		_steps.Add((payload, _) =>
+			Task.FromResult(condition(payload)
+				? activity(payload)
+				: Either<TError, TPayload>.FromRight(payload)));
 		return this;
 	}
 
@@ -276,9 +257,9 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Action<Features.Group.GroupBuilder<TRequest, TPayload, TSuccess, TError>> groupConfiguration)
 	{
 		var group = new Features.Group.Group<TPayload, TError>(condition);
-		_features.Add(group);
-		var groupBuilder = new Features.Group.GroupBuilder<TRequest, TPayload, TSuccess, TError>(this, group);
+		var groupBuilder = new Features.Group.GroupBuilder<TRequest, TPayload, TSuccess, TError>(group);
 		groupConfiguration(groupBuilder);
+		_steps.Add((payload, ct) => ExecuteFeatureStepAsync(group, payload, ct));
 		return this;
 	}
 
@@ -377,9 +358,9 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Action<Features.Context.ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>> contextConfiguration)
 	{
 		var context = new Features.Context.Context<TPayload, TLocalState, TError>(condition, localStateFactory);
-		_features.Add(context);
-		var contextBuilder = new Features.Context.ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>(this, context);
+		var contextBuilder = new Features.Context.ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>(context);
 		contextConfiguration(contextBuilder);
+		_steps.Add((payload, ct) => ExecuteFeatureStepAsync(context, payload, ct));
 		return this;
 	}
 
@@ -409,9 +390,9 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Action<Features.Detached.DetachedBuilder<TRequest, TPayload, TSuccess, TError>> detachedConfiguration)
 	{
 		var detached = new Features.Detached.Detached<TPayload, TError>(condition);
-		_features.Add(detached);
-		var detachedBuilder = new Features.Detached.DetachedBuilder<TRequest, TPayload, TSuccess, TError>(this, detached);
+		var detachedBuilder = new Features.Detached.DetachedBuilder<TRequest, TPayload, TSuccess, TError>(detached);
 		detachedConfiguration(detachedBuilder);
+		_steps.Add((payload, ct) => ExecuteFeatureStepAsync(detached, payload, ct));
 		return this;
 	}
 
@@ -439,9 +420,9 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Action<Features.Parallel.ParallelBuilder<TRequest, TPayload, TSuccess, TError>> parallelConfiguration)
 	{
 		var parallel = new Features.Parallel.Parallel<TPayload, TError>(condition);
-		_features.Add(parallel);
-		var parallelBuilder = new Features.Parallel.ParallelBuilder<TRequest, TPayload, TSuccess, TError>(this, parallel);
+		var parallelBuilder = new Features.Parallel.ParallelBuilder<TRequest, TPayload, TSuccess, TError>(parallel);
 		parallelConfiguration(parallelBuilder);
+		_steps.Add((payload, ct) => ExecuteFeatureStepAsync(parallel, payload, ct));
 		return this;
 	}
 
@@ -469,10 +450,10 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		Action<Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>> parallelDetachedConfiguration)
 	{
 		var parallelDetached = new Features.Parallel.ParallelDetached<TPayload, TError>(condition);
-		_features.Add(parallelDetached);
 		var parallelDetachedBuilder =
-			new Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>(this, parallelDetached);
+			new Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>(parallelDetached);
 		parallelDetachedConfiguration(parallelDetachedBuilder);
+		_steps.Add((payload, ct) => ExecuteFeatureStepAsync(parallelDetached, payload, ct));
 		return this;
 	}
 
@@ -551,17 +532,11 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 
 		try
 		{
-			var activitiesResult = await RunActivitiesAsync(payload, cancellationToken);
-			if (activitiesResult.IsLeft)
-				return Either<TError, TSuccess>.FromLeft(activitiesResult.Left!);
+			var stepsResult = await RunStepsAsync(payload, cancellationToken);
+			if (stepsResult.IsLeft)
+				return Either<TError, TSuccess>.FromLeft(stepsResult.Left!);
 
-			payload = activitiesResult.Right!;
-
-			var conditionalResult = await RunConditionalActivitiesAsync(payload, cancellationToken);
-			if (conditionalResult.IsLeft)
-				return Either<TError, TSuccess>.FromLeft(conditionalResult.Left!);
-
-			payload = conditionalResult.Right!;
+			payload = stepsResult.Right!;
 
 			var branchesResult = await RunBranchesAsync(payload, cancellationToken);
 			if (branchesResult.IsLeft)
@@ -574,12 +549,6 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 				return Either<TError, TSuccess>.FromLeft(branchLocalsResult.Left!);
 
 			payload = branchLocalsResult.Right!;
-
-			var featuresResult = await RunFeaturesAsync(payload, cancellationToken);
-			if (featuresResult.IsLeft)
-				return Either<TError, TSuccess>.FromLeft(featuresResult.Left!);
-
-			payload = featuresResult.Right!;
 
 			var successValue = _resultSelector(payload);
 			return Either<TError, TSuccess>.FromRight(successValue ?? default!);
@@ -635,20 +604,20 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 	}
 
 	/// <summary>
-	/// Executes all registered activities in sequence, returning either the first encountered error or the transformed payload.
+	/// Executes all registered steps in insertion order, returning either the first encountered error or the transformed payload.
 	/// </summary>
 	/// <param name="payload">The initial payload to process.</param>
 	/// <param name="cancellationToken">Token to observe for cancellation.</param>
 	/// <returns>
-	/// An Either containing the error (Left) if any activity fails, or the final payload (Right) on success.
+	/// An Either containing the error (Left) if any step fails, or the final payload (Right) on success.
 	/// </returns>
-	private async Task<Either<TError, TPayload>> RunActivitiesAsync(
+	private async Task<Either<TError, TPayload>> RunStepsAsync(
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
-		foreach (var activity in _activities)
+		foreach (var step in _steps)
 		{
-			var result = await activity.Execute(payload, cancellationToken);
+			var result = await step(payload, cancellationToken);
 			if (result.IsLeft && result.Left != null)
 				return Either<TError, TPayload>.FromLeft(result.Left);
 
@@ -659,30 +628,27 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 	}
 
 	/// <summary>
-	/// Executes conditional activities when their condition is met.
+	/// Executes a feature as a step, respecting <see cref="IRailwayFeature{TPayload,TError}.ShouldMerge"/>.
 	/// </summary>
+	/// <param name="feature">The feature to execute.</param>
 	/// <param name="payload">The current payload.</param>
 	/// <param name="cancellationToken">Token to observe for cancellation.</param>
 	/// <returns>
-	/// An Either containing the error (Left) if any conditional activity fails, or the updated payload (Right) on success.
+	/// An Either containing the error (Left) if the feature fails, or the payload (Right) — merged when
+	/// <see cref="IRailwayFeature{TPayload,TError}.ShouldMerge"/> is <see langword="true"/>, unchanged otherwise.
 	/// </returns>
-	private async Task<Either<TError, TPayload>> RunConditionalActivitiesAsync(
+	private async Task<Either<TError, TPayload>> ExecuteFeatureStepAsync(
+		IRailwayFeature<TPayload, TError> feature,
 		TPayload payload,
 		CancellationToken cancellationToken)
 	{
-		foreach (var conditionalActivity in _conditionalActivities)
-		{
-			if (!conditionalActivity.ShouldExecute(payload))
-				continue;
+		var result = await _featureExecutorFactory.ExecuteFeature(feature, payload, cancellationToken);
+		if (result.IsLeft && result.Left != null)
+			return Either<TError, TPayload>.FromLeft(result.Left);
 
-			var result = await conditionalActivity.Activity.Execute(payload, cancellationToken);
-			if (result.IsLeft && result.Left != null)
-				return Either<TError, TPayload>.FromLeft(result.Left);
-
-			payload = result.Right!;
-		}
-
-		return Either<TError, TPayload>.FromRight(payload);
+		return feature.ShouldMerge
+			? Either<TError, TPayload>.FromRight(result.Right!)
+			: Either<TError, TPayload>.FromRight(payload);
 	}
 
 	/// <summary>
@@ -739,32 +705,7 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		return Either<TError, TPayload>.FromRight(payload);
 	}
 
-	/// <summary>
-	/// Executes railway features like Group, Context, Detach, Parallel, merging results when applicable.
-	/// </summary>
-	/// <param name="payload">The current payload.</param>
-	/// <param name="cancellationToken">Token to observe for cancellation.</param>
-	/// <returns>
-	/// An Either containing the error (Left) if any feature fails, or the updated payload (Right) on success.
-	/// </returns>
-	private async Task<Either<TError, TPayload>> RunFeaturesAsync(
-		TPayload payload,
-		CancellationToken cancellationToken)
-	{
-		var factory = new FeatureExecutorFactory<TPayload, TError>();
 
-		foreach (var feature in _features)
-		{
-			var result = await factory.ExecuteFeature(feature, payload, cancellationToken);
-			if (result.IsLeft && result.Left != null)
-				return Either<TError, TPayload>.FromLeft(result.Left);
-
-			if (feature.ShouldMerge)
-				payload = result.Right!;
-		}
-
-		return Either<TError, TPayload>.FromRight(payload);
-	}
 
 	/// <summary>
 	/// Executes all the "finally" activities, ignoring errors.
@@ -802,7 +743,7 @@ public class RailwayBuilder<TRequest, TPayload, TSuccess, TError>
 		var branchType = branchObject.GetType();
 
 		if (branchType.IsGenericType &&
-		    branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
+			branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
 		{
 			var methodInfo = typeof(RailwayBuilder<TRequest, TPayload, TSuccess, TError>)
 				.GetMethod(nameof(ExecuteBranchWithLocalPayload), BindingFlags.NonPublic | BindingFlags.Instance);
