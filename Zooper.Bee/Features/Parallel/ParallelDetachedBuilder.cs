@@ -12,14 +12,10 @@ namespace Zooper.Bee.Features.Parallel;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly ParallelDetached<TPayload, TError> _parallelDetached;
 
-	internal ParallelDetachedBuilder(
-		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
-		ParallelDetached<TPayload, TError> parallelDetached)
+	internal ParallelDetachedBuilder(ParallelDetached<TPayload, TError> parallelDetached)
 	{
-		_workflow = workflow;
 		_parallelDetached = parallelDetached;
 	}
 
@@ -34,7 +30,7 @@ public sealed class ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError
 		var detached = new Detached<TPayload, TError>();
 		_parallelDetached.DetachedGroups.Add(detached);
 
-		var detachedBuilder = new DetachedBuilder<TRequest, TPayload, TSuccess, TError>(_workflow, detached);
+		var detachedBuilder = new DetachedBuilder<TRequest, TPayload, TSuccess, TError>(detached);
 		detachedConfiguration(detachedBuilder);
 
 		return this;
@@ -53,7 +49,7 @@ public sealed class ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError
 		var detached = new Detached<TPayload, TError>(condition);
 		_parallelDetached.DetachedGroups.Add(detached);
 
-		var detachedBuilder = new DetachedBuilder<TRequest, TPayload, TSuccess, TError>(_workflow, detached);
+		var detachedBuilder = new DetachedBuilder<TRequest, TPayload, TSuccess, TError>(detached);
 		detachedConfiguration(detachedBuilder);
 
 		return this;
