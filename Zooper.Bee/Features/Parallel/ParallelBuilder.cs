@@ -12,14 +12,10 @@ namespace Zooper.Bee.Features.Parallel;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class ParallelBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly Parallel<TPayload, TError> _parallel;
 
-	internal ParallelBuilder(
-		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
-		Parallel<TPayload, TError> parallel)
+	internal ParallelBuilder(Parallel<TPayload, TError> parallel)
 	{
-		_workflow = workflow;
 		_parallel = parallel;
 	}
 
@@ -34,7 +30,7 @@ public sealed class ParallelBuilder<TRequest, TPayload, TSuccess, TError>
 		var group = new Group<TPayload, TError>();
 		_parallel.Groups.Add(group);
 
-		var groupBuilder = new GroupBuilder<TRequest, TPayload, TSuccess, TError>(_workflow, group);
+		var groupBuilder = new GroupBuilder<TRequest, TPayload, TSuccess, TError>(group);
 		groupConfiguration(groupBuilder);
 
 		return this;
@@ -53,7 +49,7 @@ public sealed class ParallelBuilder<TRequest, TPayload, TSuccess, TError>
 		var group = new Group<TPayload, TError>(condition);
 		_parallel.Groups.Add(group);
 
-		var groupBuilder = new GroupBuilder<TRequest, TPayload, TSuccess, TError>(_workflow, group);
+		var groupBuilder = new GroupBuilder<TRequest, TPayload, TSuccess, TError>(group);
 		groupConfiguration(groupBuilder);
 
 		return this;

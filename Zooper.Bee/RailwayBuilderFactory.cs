@@ -6,6 +6,7 @@ namespace Zooper.Bee;
 /// <summary>
 /// Provides factory methods for creating railways without requiring a request parameter.
 /// </summary>
+[Obsolete("Use Railway.Create() instead, which enforces a clear separation between the guard/validation phase and the step execution phase.")]
 public static class RailwayBuilderFactory
 {
 	/// <summary>

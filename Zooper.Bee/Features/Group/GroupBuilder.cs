@@ -15,14 +15,10 @@ namespace Zooper.Bee.Features.Group;
 /// <typeparam name="TError">The type of the error result</typeparam>
 public sealed class GroupBuilder<TRequest, TPayload, TSuccess, TError>
 {
-	private readonly RailwayBuilder<TRequest, TPayload, TSuccess, TError> _workflow;
 	private readonly Group<TPayload, TError> _group;
 
-	internal GroupBuilder(
-		RailwayBuilder<TRequest, TPayload, TSuccess, TError> workflow,
-		Group<TPayload, TError> group)
+	internal GroupBuilder(Group<TPayload, TError> group)
 	{
-		_workflow = workflow;
 		_group = group;
 	}
 

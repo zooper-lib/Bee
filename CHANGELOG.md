@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Railway.Create()` — two-phase builder factory** that enforces a clear separation between the
+  guard/validation phase and the step execution phase at the type-system level
+  - `Railway.Create(factory, selector, guards, steps)` — with guards
+  - `Railway.Create(factory, selector, steps)` — without guards (convenience overload)
+  - Parameterless variants (`Func<TPayload>` factory) for railways with no request input
+  - New `RailwayGuardBuilder<...>` — only exposes `Guard()` and `Validate()`
+  - New `RailwayStepsBuilder<...>` — only exposes `Do()`, `DoIf()`, `DoAll()`, `Group()`,
+    `WithContext()`, `Detach()`, `Parallel()`, `ParallelDetached()`, `Finally()`, and `Build()`
+
+### Fixed
+
+- **Registration-order bug**: `Group()`, `WithContext()`, `Detach()`, `Parallel()`, and
+  `ParallelDetached()` steps now execute in the exact order they were registered, interleaved
+  correctly with `Do()` steps. Previously all `Do()` steps ran before all feature steps
+  regardless of registration order.
+
+### Deprecated
+
+- `RailwayBuilder<TRequest, TPayload, TSuccess, TError>` — use `Railway.Create()` instead
+- `RailwayBuilderFactory` — use `Railway.Create()` instead
+
 ## [3.4.1] - 2026-03-21
 
 ### Changed
