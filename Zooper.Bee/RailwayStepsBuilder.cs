@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Zooper.Bee.Features;
 using Zooper.Bee.Internal;
-using Zooper.Bee.Internal.Executors;
 using Zooper.Fox;
 
 // ReSharper disable MemberCanBePrivate.Global
@@ -13,26 +10,22 @@ using Zooper.Fox;
 namespace Zooper.Bee;
 
 /// <summary>
-/// Builds the step execution phase of a railway.
-/// Obtained via <see cref="Railway.Create{TRequest,TPayload,TSuccess,TError}(System.Func{TRequest,TPayload},System.Func{TPayload,TSuccess},System.Action{RailwayGuardBuilder{TRequest,TPayload,TSuccess,TError}},System.Action{RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}})"/>.
-/// All steps are executed in registration order after the guard phase completes.
+/// Fluent builder for the steps phase of a railway pipeline.
+/// Operators are appended in registration order and executed sequentially,
+/// each receiving the full <see cref="Zooper.Fox.Either{TLeft,TRight}"/> state produced by the previous step.
 /// </summary>
-/// <typeparam name="TRequest">The type of the request input.</typeparam>
-/// <typeparam name="TPayload">The type of the payload used to carry intermediate data.</typeparam>
-/// <typeparam name="TSuccess">The type of the success result.</typeparam>
-/// <typeparam name="TError">The type of the error result.</typeparam>
+/// <typeparam name="TRequest">The type of the incoming request used to initialise the payload.</typeparam>
+/// <typeparam name="TPayload">The mutable working payload that flows through the pipeline.</typeparam>
+/// <typeparam name="TSuccess">The type returned when the pipeline completes on the <c>Right</c> rail.</typeparam>
+/// <typeparam name="TError">The type returned when the pipeline terminates on the <c>Left</c> rail.</typeparam>
 public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
 {
     private readonly Func<TRequest, TPayload> _contextFactory;
     private readonly Func<TPayload, TSuccess> _resultSelector;
     private readonly List<RailwayGuard<TRequest, TError>> _guards;
     private readonly List<RailwayValidation<TRequest, TError>> _validations;
-
-    private readonly List<Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>>> _steps = [];
-    private readonly FeatureExecutorFactory<TPayload, TError> _featureExecutorFactory = new();
-    private readonly List<RailwayStep<TPayload, TError>> _finallyActivities = [];
-    private readonly List<Branch<TPayload, TError>> _branches = [];
-    private readonly List<object> _branchesWithLocalPayload = [];
+    private readonly List<Func<Either<TError, TPayload>, TPayload, CancellationToken, Task<Either<TError, TPayload>>>> _operators = [];
+    private readonly List<Func<TPayload, CancellationToken, Task>> _finallyActivities = [];
 
     internal RailwayStepsBuilder(
         Func<TRequest, TPayload> contextFactory,
@@ -47,327 +40,415 @@ public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
     }
 
     /// <summary>
-    /// Adds an activity to the railway.
+    /// Adds an asynchronous payload-progression step.
+    /// <para>The result <strong>is fed back</strong> into the pipeline — the returned
+    /// <see cref="Either{TError,TPayload}"/> becomes the new pipeline state seen by downstream operators.</para>
+    /// <para>On <c>Right</c>: executes the delegate; its result becomes the new state.</para>
+    /// <para>On <c>Left</c>: skips — the existing error propagates unchanged.</para>
     /// </summary>
-    /// <param name="activity">The activity function</param>
-    /// <returns>The builder instance for method chaining</returns>
+    /// <param name="activity">The asynchronous delegate that transforms the payload or returns an error.</param>
     public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Do(
         Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
     {
-        _steps.Add(activity);
+        _operators.Add((current, _, ct) =>
+            current.IsRight ? activity(current.Right!, ct) : Task.FromResult(current));
         return this;
     }
 
     /// <summary>
-    /// Adds a synchronous activity to the railway.
+    /// Adds a synchronous payload-progression step.
+    /// <para>The result <strong>is fed back</strong> into the pipeline — the returned
+    /// <see cref="Either{TError,TPayload}"/> becomes the new pipeline state seen by downstream operators.</para>
+    /// <para>On <c>Right</c>: executes the delegate; its result becomes the new state.</para>
+    /// <para>On <c>Left</c>: skips — the existing error propagates unchanged.</para>
     /// </summary>
-    /// <param name="activity">The activity function</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Do(Func<TPayload, Either<TError, TPayload>> activity)
-    {
-        _steps.Add((payload, _) => Task.FromResult(activity(payload)));
-        return this;
-    }
-
-    /// <summary>
-    /// Adds multiple activities to the railway.
-    /// </summary>
-    /// <param name="activities">The activity functions</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> DoAll(
-        params Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>>[] activities)
-    {
-        foreach (var activity in activities)
-        {
-            _steps.Add(activity);
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Adds multiple synchronous activities to the railway.
-    /// </summary>
-    /// <param name="activities">The activity functions</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> DoAll(
-        params Func<TPayload, Either<TError, TPayload>>[] activities)
-    {
-        foreach (var activity in activities)
-        {
-            _steps.Add((payload, _) => Task.FromResult(activity(payload)));
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Adds a conditional activity to the railway that will only execute if the condition returns true.
-    /// </summary>
-    /// <param name="condition">The condition to evaluate</param>
-    /// <param name="activity">The activity to execute if the condition is true</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> DoIf(
-        Func<TPayload, bool> condition,
-        Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
-    {
-        _steps.Add((payload, ct) =>
-            condition(payload)
-                ? activity(payload, ct)
-                : Task.FromResult(Either<TError, TPayload>.FromRight(payload)));
-        return this;
-    }
-
-    /// <summary>
-    /// Adds a synchronous conditional activity to the railway that will only execute if the condition returns true.
-    /// </summary>
-    /// <param name="condition">The condition to evaluate</param>
-    /// <param name="activity">The activity to execute if the condition is true</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> DoIf(
-        Func<TPayload, bool> condition,
+    /// <param name="activity">The synchronous delegate that transforms the payload or returns an error.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Do(
         Func<TPayload, Either<TError, TPayload>> activity)
     {
-        _steps.Add((payload, _) =>
-            Task.FromResult(condition(payload)
-                ? activity(payload)
-                : Either<TError, TPayload>.FromRight(payload)));
+        _operators.Add((current, _, _ct) =>
+            Task.FromResult(current.IsRight ? activity(current.Right!) : current));
         return this;
     }
 
     /// <summary>
-    /// Creates a group of activities in the railway with an optional condition.
+    /// Adds a business-rule assertion. Fails the pipeline when <paramref name="when"/> returns <c>false</c>.
+    /// <para>The result is <strong>not</strong> fed back — the payload is never replaced; only the rail can change.</para>
+    /// <para>On <c>Right</c>: if <paramref name="when"/> returns <c>false</c>, transitions to
+    /// <c>Left(failWith(payload))</c>; if <c>true</c>, the existing state passes through unchanged.</para>
+    /// <para>On <c>Left</c>: skips without evaluating the predicate.</para>
     /// </summary>
-    /// <param name="condition">The condition to evaluate. If null, the group always executes.</param>
-    /// <param name="groupConfiguration">An action that configures the group</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Group(
-        Func<TPayload, bool>? condition,
-        Action<Features.Group.GroupBuilder<TRequest, TPayload, TSuccess, TError>> groupConfiguration)
+    /// <param name="when">Predicate that must return <c>true</c> for the pipeline to continue.</param>
+    /// <param name="failWith">Produces the error value when the assertion fails.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Ensure(
+        Func<TPayload, bool> when,
+        Func<TPayload, TError> failWith)
     {
-        var group = new Features.Group.Group<TPayload, TError>(condition);
-        var groupBuilder = new Features.Group.GroupBuilder<TRequest, TPayload, TSuccess, TError>(group);
-        groupConfiguration(groupBuilder);
-        _steps.Add((payload, ct) => ExecuteFeatureStepAsync(group, payload, ct));
+        _operators.Add((current, _, _ct) =>
+        {
+            if (!current.IsRight) return Task.FromResult(current);
+            var payload = current.Right!;
+            return Task.FromResult(!when(payload)
+                ? Either<TError, TPayload>.FromLeft(failWith(payload))
+                : current);
+        });
         return this;
     }
 
     /// <summary>
-    /// Creates a group of activities in the railway that always executes.
+    /// Conditionally enters a sub-pipeline when <paramref name="when"/> returns <c>true</c>.
+    /// <para>The result <strong>is fed back</strong> — the sub-pipeline's final
+    /// <see cref="Either{TError,TPayload}"/> state replaces the main pipeline state.</para>
+    /// <para>On <c>Right</c>, predicate <c>true</c>: runs the sub-pipeline; its result becomes the new state.</para>
+    /// <para>On <c>Right</c>, predicate <c>false</c>: no-op, existing state passes through unchanged.</para>
+    /// <para>On <c>Left</c>: skips — predicate is not evaluated.</para>
+    /// <remarks><c>Branch</c>, <c>Detach</c>, and <c>Finally</c> are intentionally excluded from the inner
+    /// <see cref="BranchBuilder{TPayload,TError}"/> to keep branch scope well-defined.</remarks>
     /// </summary>
-    /// <param name="groupConfiguration">An action that configures the group</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Group(
-        Action<Features.Group.GroupBuilder<TRequest, TPayload, TSuccess, TError>> groupConfiguration)
+    /// <param name="when">Predicate evaluated against the current payload to decide whether to enter the branch.</param>
+    /// <param name="branch">Action that configures the sub-pipeline operators.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Branch(
+        Func<TPayload, bool> when,
+        Action<BranchBuilder<TPayload, TError>> branch)
     {
-        return Group(null, groupConfiguration);
-    }
+        var branchBuilder = new BranchBuilder<TPayload, TError>();
+        branch(branchBuilder);
+        var branchOps = branchBuilder.Operators;
 
-    /// <summary>
-    /// Creates a context with local state in the railway and an optional condition.
-    /// </summary>
-    /// <typeparam name="TLocalState">The type of the local context state</typeparam>
-    /// <param name="condition">The condition to evaluate. If null, the context always executes.</param>
-    /// <param name="localStateFactory">The factory function that creates the local state</param>
-    /// <param name="contextConfiguration">An action that configures the context</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> WithContext<TLocalState>(
-        Func<TPayload, bool>? condition,
-        Func<TPayload, TLocalState> localStateFactory,
-        Action<Features.Context.ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>> contextConfiguration)
-    {
-        var context = new Features.Context.Context<TPayload, TLocalState, TError>(condition, localStateFactory);
-        var contextBuilder = new Features.Context.ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>(context);
-        contextConfiguration(contextBuilder);
-        _steps.Add((payload, ct) => ExecuteFeatureStepAsync(context, payload, ct));
+        _operators.Add(async (current, _, ct) =>
+        {
+            if (!current.IsRight) return current;
+            if (!when(current.Right!)) return current;
+
+            var branchCurrent = current;
+            var branchLastRight = current.Right!;
+            foreach (var op in branchOps)
+            {
+                if (branchCurrent.IsRight) branchLastRight = branchCurrent.Right!;
+                branchCurrent = await op(branchCurrent, branchLastRight, ct);
+            }
+            return branchCurrent;
+        });
         return this;
     }
 
     /// <summary>
-    /// Creates a context with local state in the railway that always executes.
+    /// Adds a strict synchronous pass-through side effect. The payload is never replaced.
+    /// <para>The result is <strong>not</strong> fed back — the existing state passes through unchanged.</para>
+    /// <para>On <c>Right</c>: executes the effect; exceptions propagate to the caller.</para>
+    /// <para>On <c>Left</c>: skips without invoking the delegate.</para>
     /// </summary>
-    /// <typeparam name="TLocalState">The type of the local context state</typeparam>
-    /// <param name="localStateFactory">The factory function that creates the local state</param>
-    /// <param name="contextConfiguration">An action that configures the context</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> WithContext<TLocalState>(
-        Func<TPayload, TLocalState> localStateFactory,
-        Action<Features.Context.ContextBuilder<TRequest, TPayload, TLocalState, TSuccess, TError>> contextConfiguration)
+    /// <param name="effect">The synchronous side-effect delegate.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Tap(Action<TPayload> effect)
     {
-        return WithContext(null, localStateFactory, contextConfiguration);
+        _operators.Add((current, _, _ct) =>
+        {
+            if (!current.IsRight) return Task.FromResult(current);
+            effect(current.Right!);
+            return Task.FromResult(current);
+        });
+        return this;
     }
 
     /// <summary>
-    /// Creates a detached group of activities in the railway with an optional condition.
-    /// Detached groups don't merge their results back into the main railway.
+    /// Adds a strict asynchronous pass-through side effect. The payload is never replaced.
+    /// <para>The result is <strong>not</strong> fed back — the existing state passes through unchanged.</para>
+    /// <para>On <c>Right</c>: executes the effect; exceptions propagate to the caller.</para>
+    /// <para>On <c>Left</c>: skips without invoking the delegate.</para>
     /// </summary>
-    /// <param name="condition">The condition to evaluate. If null, the detached group always executes.</param>
-    /// <param name="detachedConfiguration">An action that configures the detached group</param>
-    /// <returns>The builder instance for method chaining</returns>
+    /// <param name="effect">The asynchronous side-effect delegate.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Tap(
+        Func<TPayload, CancellationToken, Task> effect)
+    {
+        _operators.Add(async (current, _, ct) =>
+        {
+            if (!current.IsRight) return current;
+            await effect(current.Right!, ct);
+            return current;
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a strict asynchronous pass-through side effect with an explicit error channel.
+    /// <para>The payload is never replaced, but the rail can change.</para>
+    /// <para>The result is <strong>not</strong> fed back as a new payload — however, a <c>Left</c> return value
+    /// switches the pipeline to the error rail.</para>
+    /// <para>On <c>Right</c>: executes the effect; returning <c>Left</c> transitions the pipeline to the error rail;
+    /// returning <c>Right(Unit)</c> leaves the existing state unchanged.</para>
+    /// <para>On <c>Left</c>: skips without invoking the delegate.</para>
+    /// </summary>
+    /// <param name="effect">The asynchronous side-effect delegate that can signal failure via <c>Left</c>.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Tap(
+        Func<TPayload, CancellationToken, Task<Either<TError, Unit>>> effect)
+    {
+        _operators.Add(async (current, _, ct) =>
+        {
+            if (!current.IsRight) return current;
+            var result = await effect(current.Right!, ct);
+            return result.IsLeft ? Either<TError, TPayload>.FromLeft(result.Left!) : current;
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds grouped strict pass-through side effects via an inner <see cref="EffectsBuilder{TPayload,TError}"/>.
+    /// <para>The result is <strong>not</strong> fed back — inner effects signal success/failure via
+    /// <c>Either&lt;TError, Unit&gt;</c> and cannot produce a new payload.</para>
+    /// <para>On <c>Right</c>: runs each inner effect in order; the first <c>Left</c> result short-circuits
+    /// the group and switches the pipeline to the error rail; on success the existing state passes through unchanged.</para>
+    /// <para>On <c>Left</c>: skips the entire group.</para>
+    /// </summary>
+    /// <param name="configure">Action that registers inner effects on the <see cref="EffectsBuilder{TPayload,TError}"/>.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Effects(
+        Action<EffectsBuilder<TPayload, TError>> configure)
+    {
+        var builder = new EffectsBuilder<TPayload, TError>();
+        configure(builder);
+        var effects = builder.Effects;
+
+        _operators.Add(async (current, _, ct) =>
+        {
+            if (!current.IsRight) return current;
+            var payload = current.Right!;
+            foreach (var effect in effects)
+            {
+                var result = await effect(payload, ct);
+                if (result.IsLeft) return Either<TError, TPayload>.FromLeft(result.Left!);
+            }
+            return current;
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds best-effort grouped side effects. All inner effects are always attempted; failures are swallowed.
+    /// <para>The result is <strong>not</strong> fed back — the existing state passes through unchanged regardless
+    /// of inner failures.</para>
+    /// <para>On <c>Right</c>: runs all inner effects in order; exceptions and <c>Left</c> returns are swallowed.</para>
+    /// <para>On <c>Left</c>: skips the entire group.</para>
+    /// </summary>
+    /// <param name="configure">Action that registers inner effects on the <see cref="EffectsBuilder{TPayload,TError}"/>.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> TryEffects(
+        Action<EffectsBuilder<TPayload, TError>> configure)
+    {
+        var builder = new EffectsBuilder<TPayload, TError>();
+        configure(builder);
+        var effects = builder.Effects;
+
+        _operators.Add(async (current, _, ct) =>
+        {
+            if (!current.IsRight) return current;
+            var payload = current.Right!;
+            foreach (var effect in effects)
+            {
+                try { await effect(payload, ct); } catch { }
+            }
+            return current;
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a best-effort synchronous pass-through side effect. Exceptions are swallowed.
+    /// <para>The result is <strong>not</strong> fed back — the existing state passes through unchanged.</para>
+    /// <para>On <c>Right</c>: executes the effect; exceptions are silently swallowed.</para>
+    /// <para>On <c>Left</c>: skips without invoking the delegate.</para>
+    /// </summary>
+    /// <param name="effect">The synchronous side-effect delegate.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> TryTap(Action<TPayload> effect)
+    {
+        _operators.Add((current, _, _ct) =>
+        {
+            if (!current.IsRight) return Task.FromResult(current);
+            try { effect(current.Right!); } catch { }
+            return Task.FromResult(current);
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a best-effort asynchronous pass-through side effect. Exceptions are swallowed.
+    /// <para>The result is <strong>not</strong> fed back — the existing state passes through unchanged.</para>
+    /// <para>On <c>Right</c>: executes the effect; exceptions are silently swallowed.</para>
+    /// <para>On <c>Left</c>: skips without invoking the delegate.</para>
+    /// </summary>
+    /// <param name="effect">The asynchronous side-effect delegate.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> TryTap(
+        Func<TPayload, CancellationToken, Task> effect)
+    {
+        _operators.Add(async (current, _, ct) =>
+        {
+            if (!current.IsRight) return current;
+            try { await effect(current.Right!, ct); } catch { }
+            return current;
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Fires a group of effects in the background without awaiting their completion.
+    /// <para>The result is <strong>discarded entirely</strong> — inner effects run on background threads via
+    /// <c>Task.Run</c> and are never awaited. Their success or failure has no effect on the pipeline.</para>
+    /// <para>On <c>Right</c>: schedules each inner effect; returns immediately with the existing state unchanged.</para>
+    /// <para>On <c>Left</c>: skips — nothing is scheduled.</para>
+    /// <para>Exceptions inside detached tasks are always swallowed.</para>
+    /// </summary>
+    /// <param name="configure">Action that registers inner effects on the <see cref="EffectsBuilder{TPayload,TError}"/>.</param>
     public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Detach(
-        Func<TPayload, bool>? condition,
-        Action<Features.Detached.DetachedBuilder<TRequest, TPayload, TSuccess, TError>> detachedConfiguration)
+        Action<EffectsBuilder<TPayload, TError>> configure)
     {
-        var detached = new Features.Detached.Detached<TPayload, TError>(condition);
-        var detachedBuilder = new Features.Detached.DetachedBuilder<TRequest, TPayload, TSuccess, TError>(detached);
-        detachedConfiguration(detachedBuilder);
-        _steps.Add((payload, ct) => ExecuteFeatureStepAsync(detached, payload, ct));
+        var builder = new EffectsBuilder<TPayload, TError>();
+        configure(builder);
+        var effects = builder.Effects;
+
+        _operators.Add((current, _lastRight, ct) =>
+        {
+            if (!current.IsRight) return Task.FromResult(current);
+            var payload = current.Right!;
+            foreach (var effect in effects)
+            {
+                var t = Task.Run(async () =>
+                {
+                    try { await effect(payload, ct); } catch { }
+                });
+                _ = t;
+            }
+            return Task.FromResult(current);
+        });
         return this;
     }
 
     /// <summary>
-    /// Creates a detached group of activities in the railway that always executes.
-    /// Detached groups don't merge their results back into the main railway.
+    /// Adds a typed synchronous recovery operator.
+    /// <para>The result <strong>is fed back</strong> — the handler's returned payload replaces the pipeline state,
+    /// transitioning from <c>Left</c> back to <c>Right</c>.</para>
+    /// <para>On <c>Left</c> where the error is assignable to <typeparamref name="TErr"/>: runs the handler with
+    /// <c>(error, lastRightSnapshot)</c>; the returned payload becomes the new <c>Right</c> state.</para>
+    /// <para>On <c>Left</c> with a non-matching error type: passes through unchanged.</para>
+    /// <para>On <c>Right</c>: skips — the existing state passes through unchanged.</para>
     /// </summary>
-    /// <param name="detachedConfiguration">An action that configures the detached group</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Detach(
-        Action<Features.Detached.DetachedBuilder<TRequest, TPayload, TSuccess, TError>> detachedConfiguration)
+    /// <typeparam name="TErr">The specific error type this recovery handles.</typeparam>
+    /// <param name="handler">Receives the matched error and the last known <c>Right</c> payload snapshot;
+    /// returns the recovered payload.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Recover<TErr>(
+        Func<TErr, TPayload, TPayload> handler)
     {
-        return Detach(null, detachedConfiguration);
-    }
-
-    /// <summary>
-    /// Creates a parallel execution of multiple groups with an optional condition.
-    /// All groups execute in parallel, and their results are merged back into the main railway.
-    /// </summary>
-    /// <param name="condition">The condition to evaluate. If null, the parallel execution always occurs.</param>
-    /// <param name="parallelConfiguration">An action that configures the parallel execution</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Parallel(
-        Func<TPayload, bool>? condition,
-        Action<Features.Parallel.ParallelBuilder<TRequest, TPayload, TSuccess, TError>> parallelConfiguration)
-    {
-        var parallel = new Features.Parallel.Parallel<TPayload, TError>(condition);
-        var parallelBuilder = new Features.Parallel.ParallelBuilder<TRequest, TPayload, TSuccess, TError>(parallel);
-        parallelConfiguration(parallelBuilder);
-        _steps.Add((payload, ct) => ExecuteFeatureStepAsync(parallel, payload, ct));
+        _operators.Add((current, lastRight, _ct) =>
+        {
+            if (!current.IsLeft) return Task.FromResult(current);
+            if (current.Left is TErr err)
+                return Task.FromResult(Either<TError, TPayload>.FromRight(handler(err, lastRight)));
+            return Task.FromResult(current);
+        });
         return this;
     }
 
     /// <summary>
-    /// Creates a parallel execution of multiple groups that always executes.
-    /// All groups execute in parallel, and their results are merged back into the main railway.
+    /// Adds a typed asynchronous recovery operator.
+    /// <para>The result <strong>is fed back</strong> — the handler's returned payload replaces the pipeline state,
+    /// transitioning from <c>Left</c> back to <c>Right</c>.</para>
+    /// <para>On <c>Left</c> where the error is assignable to <typeparamref name="TErr"/>: runs the handler with
+    /// <c>(error, lastRightSnapshot)</c>; the returned payload becomes the new <c>Right</c> state.</para>
+    /// <para>On <c>Left</c> with a non-matching error type: passes through unchanged.</para>
+    /// <para>On <c>Right</c>: skips — the existing state passes through unchanged.</para>
     /// </summary>
-    /// <param name="parallelConfiguration">An action that configures the parallel execution</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Parallel(
-        Action<Features.Parallel.ParallelBuilder<TRequest, TPayload, TSuccess, TError>> parallelConfiguration)
+    /// <typeparam name="TErr">The specific error type this recovery handles.</typeparam>
+    /// <param name="handler">Receives the matched error and the last known <c>Right</c> payload snapshot;
+    /// returns the recovered payload asynchronously.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Recover<TErr>(
+        Func<TErr, TPayload, CancellationToken, Task<TPayload>> handler)
     {
-        return Parallel(null, parallelConfiguration);
-    }
-
-    /// <summary>
-    /// Creates a parallel execution of multiple detached groups with an optional condition.
-    /// All detached groups execute in parallel, and their results are NOT merged back.
-    /// </summary>
-    /// <param name="condition">The condition to evaluate. If null, the parallel detached execution always occurs.</param>
-    /// <param name="parallelDetachedConfiguration">An action that configures the parallel detached execution</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> ParallelDetached(
-        Func<TPayload, bool>? condition,
-        Action<Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>> parallelDetachedConfiguration)
-    {
-        var parallelDetached = new Features.Parallel.ParallelDetached<TPayload, TError>(condition);
-        var parallelDetachedBuilder =
-            new Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>(parallelDetached);
-        parallelDetachedConfiguration(parallelDetachedBuilder);
-        _steps.Add((payload, ct) => ExecuteFeatureStepAsync(parallelDetached, payload, ct));
+        _operators.Add(async (current, lastRight, ct) =>
+        {
+            if (!current.IsLeft) return current;
+            if (current.Left is TErr err)
+                return Either<TError, TPayload>.FromRight(await handler(err, lastRight, ct));
+            return current;
+        });
         return this;
     }
 
     /// <summary>
-    /// Creates a parallel execution of multiple detached groups that always executes.
-    /// All detached groups execute in parallel, and their results are NOT merged back.
+    /// Registers an asynchronous cleanup activity that always executes regardless of pipeline success or failure.
+    /// <para>The result is <strong>discarded entirely</strong> — <c>Finally</c> runs outside the pipeline state
+    /// machine and cannot affect the final <see cref="Either{TError,TSuccess}"/> result.</para>
+    /// <para>Receives the last known <c>Right</c> payload (the pre-failure snapshot if the pipeline failed).</para>
+    /// <para>Exceptions are swallowed so that subsequent <c>Finally</c> registrations always get a chance to run.</para>
     /// </summary>
-    /// <param name="parallelDetachedConfiguration">An action that configures the parallel detached execution</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> ParallelDetached(
-        Action<Features.Parallel.ParallelDetachedBuilder<TRequest, TPayload, TSuccess, TError>> parallelDetachedConfiguration)
-    {
-        return ParallelDetached(null, parallelDetachedConfiguration);
-    }
-
-    /// <summary>
-    /// Adds an activity to the "finally" block that will always execute, even if the railway fails.
-    /// </summary>
-    /// <param name="activity">The activity to execute</param>
-    /// <returns>The builder instance for method chaining</returns>
+    /// <param name="activity">The asynchronous cleanup delegate.</param>
     public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Finally(
-        Func<TPayload, CancellationToken, Task<Either<TError, TPayload>>> activity)
+        Func<TPayload, CancellationToken, Task> activity)
     {
-        _finallyActivities.Add(new(activity));
+        _finallyActivities.Add(activity);
         return this;
     }
 
     /// <summary>
-    /// Adds a synchronous activity to the "finally" block that will always execute, even if the railway fails.
+    /// Registers a synchronous cleanup activity that always executes regardless of pipeline success or failure.
+    /// <para>The result is <strong>discarded entirely</strong> — <c>Finally</c> runs outside the pipeline state
+    /// machine and cannot affect the final <see cref="Either{TError,TSuccess}"/> result.</para>
+    /// <para>Receives the last known <c>Right</c> payload (the pre-failure snapshot if the pipeline failed).</para>
+    /// <para>Exceptions are swallowed so that subsequent <c>Finally</c> registrations always get a chance to run.</para>
     /// </summary>
-    /// <param name="activity">The activity to execute</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Finally(
-        Func<TPayload, Either<TError, TPayload>> activity)
+    /// <param name="activity">The synchronous cleanup delegate.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Finally(Action<TPayload> activity)
     {
-        _finallyActivities.Add(new((payload, _) => Task.FromResult(activity(payload))));
+        _finallyActivities.Add((payload, _) => { activity(payload); return Task.CompletedTask; });
         return this;
     }
 
     /// <summary>
-    /// Builds a railway that processes a request and returns either a success or an error.
+    /// Builds and returns the configured <see cref="Railway{TRequest,TSuccess,TError}"/> ready for execution.
     /// </summary>
-    public Railway<TRequest, TSuccess, TError> Build()
-    {
-        return new(ExecuteRailwayAsync);
-    }
+    public Railway<TRequest, TSuccess, TError> Build() => new(ExecuteRailwayAsync);
 
     private async Task<Either<TError, TSuccess>> ExecuteRailwayAsync(
         TRequest request,
         CancellationToken cancellationToken)
     {
         var validationResult = await RunValidationsAsync(request, cancellationToken);
-        if (validationResult.IsLeft)
-            return Either<TError, TSuccess>.FromLeft(validationResult.Left!);
+        if (validationResult.IsLeft) return Either<TError, TSuccess>.FromLeft(validationResult.Left!);
 
         var guardResult = await RunGuardsAsync(request, cancellationToken);
-        if (guardResult.IsLeft)
-            return Either<TError, TSuccess>.FromLeft(guardResult.Left!);
+        if (guardResult.IsLeft) return Either<TError, TSuccess>.FromLeft(guardResult.Left!);
 
         var payload = _contextFactory(request);
-        if (payload == null)
-            return Either<TError, TSuccess>.FromRight(_resultSelector(default!));
+        if (payload == null) return Either<TError, TSuccess>.FromRight(_resultSelector(default!));
 
+        var lastRight = payload;
         try
         {
-            var stepsResult = await RunStepsAsync(payload, cancellationToken);
-            if (stepsResult.IsLeft)
-                return Either<TError, TSuccess>.FromLeft(stepsResult.Left!);
-
-            payload = stepsResult.Right!;
-
-            var branchesResult = await RunBranchesAsync(payload, cancellationToken);
-            if (branchesResult.IsLeft)
-                return Either<TError, TSuccess>.FromLeft(branchesResult.Left!);
-
-            payload = branchesResult.Right!;
-
-            var branchLocalsResult = await RunBranchesWithLocalPayloadAsync(payload, cancellationToken);
-            if (branchLocalsResult.IsLeft)
-                return Either<TError, TSuccess>.FromLeft(branchLocalsResult.Left!);
-
-            payload = branchLocalsResult.Right!;
-
-            var successValue = _resultSelector(payload);
-            return Either<TError, TSuccess>.FromRight(successValue ?? default!);
+            var (result, finalLastRight) = await RunOperatorsAsync(payload, cancellationToken);
+            lastRight = finalLastRight;
+            if (result.IsLeft) return Either<TError, TSuccess>.FromLeft(result.Left!);
+            return Either<TError, TSuccess>.FromRight(_resultSelector(result.Right!) ?? default!);
         }
         finally
         {
-            _ = await RunFinallyActivitiesAsync(payload, cancellationToken);
+            await RunFinallyActivitiesAsync(lastRight, cancellationToken);
         }
     }
 
-    private async Task<Either<TError, TPayload>> RunValidationsAsync(
-        TRequest request,
+    private async Task<(Either<TError, TPayload> result, TPayload lastRight)> RunOperatorsAsync(
+        TPayload initialPayload,
         CancellationToken cancellationToken)
+    {
+        var current = Either<TError, TPayload>.FromRight(initialPayload);
+        var lastRight = initialPayload;
+
+        foreach (var op in _operators)
+        {
+            if (current.IsRight) lastRight = current.Right!;
+            current = await op(current, lastRight, cancellationToken);
+        }
+
+        if (current.IsRight) lastRight = current.Right!;
+        return (current, lastRight);
+    }
+
+    private async Task<Either<TError, TPayload>> RunValidationsAsync(
+        TRequest request, CancellationToken cancellationToken)
     {
         foreach (var validation in _validations)
         {
@@ -375,148 +456,27 @@ public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
             if (validationOption.IsSome && validationOption.Value != null)
                 return Either<TError, TPayload>.FromLeft(validationOption.Value);
         }
-
         return Either<TError, TPayload>.FromRight(default!);
     }
 
     private async Task<Either<TError, Unit>> RunGuardsAsync(
-        TRequest request,
-        CancellationToken cancellationToken)
+        TRequest request, CancellationToken cancellationToken)
     {
         foreach (var guard in _guards)
         {
             var result = await guard.Check(request, cancellationToken);
-            if (result.IsLeft && result.Left != null)
-                return Either<TError, Unit>.FromLeft(result.Left);
+            if (result.IsLeft && result.Left != null) return Either<TError, Unit>.FromLeft(result.Left);
         }
-
         return Either<TError, Unit>.FromRight(Unit.Value);
     }
 
-    private async Task<Either<TError, TPayload>> RunStepsAsync(
-        TPayload payload,
-        CancellationToken cancellationToken)
+    private async Task RunFinallyActivitiesAsync(
+        TPayload lastPayload, CancellationToken cancellationToken)
     {
-        foreach (var step in _steps)
+        foreach (var activity in _finallyActivities)
         {
-            var result = await step(payload, cancellationToken);
-            if (result.IsLeft && result.Left != null)
-                return Either<TError, TPayload>.FromLeft(result.Left);
-
-            payload = result.Right!;
+            try { await activity(lastPayload, cancellationToken); }
+            catch { /* swallow to allow subsequent Finally activities to run */ }
         }
-
-        return Either<TError, TPayload>.FromRight(payload);
-    }
-
-    private async Task<Either<TError, TPayload>> ExecuteFeatureStepAsync(
-        IRailwayFeature<TPayload, TError> feature,
-        TPayload payload,
-        CancellationToken cancellationToken)
-    {
-        var result = await _featureExecutorFactory.ExecuteFeature(feature, payload, cancellationToken);
-        if (result.IsLeft && result.Left != null)
-            return Either<TError, TPayload>.FromLeft(result.Left);
-
-        return feature.ShouldMerge
-            ? Either<TError, TPayload>.FromRight(result.Right!)
-            : Either<TError, TPayload>.FromRight(payload);
-    }
-
-    private async Task<Either<TError, TPayload>> RunBranchesAsync(
-        TPayload payload,
-        CancellationToken cancellationToken)
-    {
-        foreach (var branch in _branches)
-        {
-            if (!branch.Condition(payload))
-                continue;
-
-            foreach (var activity in branch.Activities)
-            {
-                var result = await activity.Execute(payload, cancellationToken);
-                if (result.IsLeft && result.Left != null)
-                    return Either<TError, TPayload>.FromLeft(result.Left);
-
-                payload = result.Right!;
-            }
-        }
-
-        return Either<TError, TPayload>.FromRight(payload);
-    }
-
-    private async Task<Either<TError, TPayload>> RunBranchesWithLocalPayloadAsync(
-        TPayload payload,
-        CancellationToken cancellationToken)
-    {
-        foreach (var branchObject in _branchesWithLocalPayload)
-        {
-            var result = await ExecuteBranchWithLocalPayloadDynamic(branchObject, payload, cancellationToken);
-            if (result.IsLeft && result.Left != null)
-                return Either<TError, TPayload>.FromLeft(result.Left);
-
-            payload = result.Right!;
-        }
-
-        return Either<TError, TPayload>.FromRight(payload);
-    }
-
-    private async Task<TPayload> RunFinallyActivitiesAsync(
-        TPayload payload,
-        CancellationToken cancellationToken)
-    {
-        foreach (var finallyActivity in _finallyActivities)
-            _ = await finallyActivity.Execute(payload, cancellationToken);
-
-        return payload;
-    }
-
-    private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayloadDynamic(
-        object branchObject,
-        TPayload payload,
-        CancellationToken cancellationToken)
-    {
-        var branchType = branchObject.GetType();
-
-        if (branchType.IsGenericType &&
-            branchType.GetGenericTypeDefinition() == typeof(BranchWithLocalPayload<,,>))
-        {
-            var methodInfo = typeof(RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>)
-                .GetMethod(nameof(ExecuteBranchWithLocalPayload), BindingFlags.NonPublic | BindingFlags.Instance);
-            if (methodInfo == null)
-                throw new InvalidOperationException($"Method {nameof(ExecuteBranchWithLocalPayload)} not found.");
-
-            var localPayloadType = branchType.GetGenericArguments()[1];
-            var genericMethod = methodInfo.MakeGenericMethod(localPayloadType);
-            var task = (Task<Either<TError, TPayload>>)genericMethod.Invoke(
-                this,
-                [branchObject, payload, cancellationToken]
-            )!;
-            return await task.ConfigureAwait(false);
-        }
-
-        return Either<TError, TPayload>.FromRight(payload);
-    }
-
-    private async Task<Either<TError, TPayload>> ExecuteBranchWithLocalPayload<TLocalPayload>(
-        BranchWithLocalPayload<TPayload, TLocalPayload, TError> branch,
-        TPayload payload,
-        CancellationToken cancellationToken)
-    {
-        if (!branch.Condition(payload))
-            return Either<TError, TPayload>.FromRight(payload);
-
-        var localPayload = branch.LocalPayloadFactory(payload);
-
-        foreach (var activity in branch.Activities)
-        {
-            var result = await activity.Execute(payload, localPayload, cancellationToken);
-            if (result.IsLeft)
-                return Either<TError, TPayload>.FromLeft(result.Left);
-
-            (payload, localPayload) = result.Right;
-        }
-
-        return Either<TError, TPayload>.FromRight(payload);
     }
 }

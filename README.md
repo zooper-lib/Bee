@@ -5,22 +5,23 @@
 [![NuGet Version](https://img.shields.io/nuget/v/Zooper.Bee.svg)](https://www.nuget.org/packages/Zooper.Bee/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A flexible and powerful railway-oriented programming library for .NET that allows you to define complex business processes with a fluent
-API.
+A flexible and powerful railway-oriented programming library for .NET that lets you define complex business processes with a fluent API.
 
 ## Overview
 
-Zooper.Bee lets you create railways that process requests and produce either successful results or meaningful errors.
-The library uses a builder pattern to construct railways with various execution patterns including sequential,
-conditional, parallel, and detached operations.
+Zooper.Bee lets you create railways that process a request and produce either a successful result or a meaningful error. The pipeline is built from composable operators registered on a fluent builder. Operators run in registration order; each one receives the full `Either` state produced by the previous operator.
 
 ## Key Concepts
 
-- **Railway**: A sequence of operations that process a request to produce a result or error
-- **Request**: The input data to the railway
-- **Payload**: Data that passes through and gets modified by railway activities
-- **Success**: The successful result of the railway
-- **Error**: The errors result if the railway fails
+| Term | Description |
+|------|-------------|
+| **Railway** | The built pipeline. Call `.Execute(request, ct)` to run it. |
+| **Request** | The input handed to the railway on each execution. |
+| **Payload** | The mutable working object that flows through every step. Created from the request by the `factory` function. |
+| **Success** | The final result produced from the payload by the `selector` function when the pipeline completes on the `Right` rail. |
+| **Error** | The value returned when the pipeline terminates on the `Left` rail. |
+| **Right rail** | The happy path — payload is valid and flows forward. |
+| **Left rail** | The error path — payload is replaced by an error value. Most operators skip on `Left`. |
 
 ## Installation
 
@@ -31,426 +32,437 @@ dotnet add package Zooper.Bee
 ## Getting Started
 
 ```csharp
-// Define a simple railway
-var railway = Railway.Create<Request, Payload, SuccessResult, ErrorResult>(
-    // Factory function that creates the initial payload from the request
-    factory:  request => new Payload { Data = request.Data },
-
-    // Selector function that creates the success result from the final payload
-    selector: payload => new SuccessResult { ProcessedData = payload.Data },
-
-    // Step execution phase
+var railway = Railway.Create<CreateOrderRequest, OrderPayload, OrderId, OrderError>(
+    factory:  request => new OrderPayload(request.CustomerId, request.Items),
+    selector: payload => new OrderId(payload.Id),
     steps: s => s
-        .Validate(request =>
-        {
-            if (string.IsNullOrEmpty(request.Data))
-                return Option<ErrorResult>.Some(new ErrorResult { Message = "Data is required" });
-            return Option<ErrorResult>.None;
-        })
         .Do(payload =>
         {
-            payload.Data = payload.Data.ToUpper();
-            return Either<ErrorResult, Payload>.FromRight(payload);
+            payload.TotalPrice = payload.Items.Sum(i => i.Price);
+            return payload;  // implicit Right
         })
+        .Tap(payload => Console.WriteLine($"Order total: {payload.TotalPrice}"))
 );
 
-// Execute the railway
-var result = await railway.Execute(new Request { Data = "hello world" }, CancellationToken.None);
+var result = await railway.Execute(request, CancellationToken.None);
+
 if (result.IsRight)
-{
-    Console.WriteLine($"Success: {result.Right.ProcessedData}"); // Output: Success: HELLO WORLD
-}
+    Console.WriteLine($"Order created: {result.Right.Id}");
 else
-{
     Console.WriteLine($"Error: {result.Left.Message}");
-}
 ```
 
-## Building Railways
-
-Railways are created with `Railway.Create()`, which takes two separate configuration lambdas:
-
-- **`guards`** — optional; declares guards and validations that run before the payload is created
-- **`steps`** — required; declares all activities that transform the payload
-
-This two-phase separation makes it structurally impossible to mix guard registration with step
-registration. `Guard()` and `Validate()` are not available inside `steps`, and `Do()`/`Group()`/etc.
-are not available inside `guards`.
+## Creating a Railway
 
 ```csharp
-var railway = Railway.Create<Request, Payload, Success, Error>(
-    factory:  request => new Payload(request),
-    selector: payload => new Success(payload.Result),
-    guards: g => g
-        .Guard(request => /* auth check */)
-        .Validate(request => /* input validation */),
-    steps: s => s
-        .Do(payload => /* step 1 */)
-        .Group(null, g => g
-            .Do(payload => /* step 2a */)
-            .Do(payload => /* step 2b */))
-        .Do(payload => /* step 3 */)
+// With guards
+var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
+    factory:  request => new TPayload(request),
+    selector: payload => new TSuccess(payload.Result),
+    guards:   g => g.Guard(...).Validate(...),
+    steps:    s => s.Do(...).Tap(...).Finally(...)
+);
+
+// Without guards
+var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
+    factory:  request => new TPayload(request),
+    selector: payload => new TSuccess(payload.Result),
+    steps:    s => s.Do(...).Tap(...)
+);
+
+// Parameterless (no request)
+var railway = Railway.Create<TPayload, TSuccess, TError>(
+    factory:  () => new TPayload(),
+    selector: payload => new TSuccess(payload.Result),
+    steps:    s => s.Do(...)
 );
 ```
 
-When no guards are needed, omit the `guards` parameter:
+The `guards` and `steps` phases are structurally separate — `Guard`/`Validate` are only available in the guard builder, and pipeline operators are only available in the steps builder.
 
-```csharp
-var railway = Railway.Create<Request, Payload, Success, Error>(
-    factory:  request => new Payload(request),
-    selector: payload => new Success(payload.Result),
-    steps: s => s
-        .Do(payload => /* ... */)
-);
-```
+---
 
-### Validation
+## Guard Phase
 
-Validations run before any step and reject the request early when invalid.
+Guards and validations run before the payload is created, providing the earliest possible short-circuit.
 
-```csharp
-// Asynchronous validation
-.Validate(async (request, cancellationToken) =>
-{
-    var isValid = await ValidateAsync(request, cancellationToken);
-    return isValid ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
-})
+### Guard
 
-// Synchronous validation
-.Validate(request =>
-{
-    var isValid = Validate(request);
-    return isValid ? Option<ErrorResult>.None : Option<ErrorResult>.Some(new ErrorResult());
-})
-```
-
-### Guards
-
-Guards check whether the railway is allowed to execute at all — authentication,
-authorization, feature flags, etc. They always run before any step, regardless of
-where they appear in the `guards` lambda.
+Checks whether the railway is allowed to execute — authentication, authorization, feature flags, etc. Returns `Right(Unit)` to allow or `Left(error)` to reject.
 
 ```csharp
 guards: g => g
-    // Asynchronous guard
-    .Guard(async (request, cancellationToken) =>
+    // Async
+    .Guard(async (request, ct) =>
     {
-        var isAuthorized = await CheckAuthorizationAsync(request, cancellationToken);
-        return isAuthorized
-            ? Either<ErrorResult, Unit>.FromRight(Unit.Value)
-            : Either<ErrorResult, Unit>.FromLeft(new ErrorResult { Message = "Unauthorized" });
+        var ok = await authService.IsAuthorizedAsync(request.UserId, ct);
+        if (!ok) return new Error("Unauthorized");  // implicit Left
+        return Unit.Value;                           // implicit Right
     })
-    // Synchronous guard
+    // Sync
     .Guard(request =>
     {
-        var isAuthorized = CheckAuthorization(request);
-        return isAuthorized
-            ? Either<ErrorResult, Unit>.FromRight(Unit.Value)
-            : Either<ErrorResult, Unit>.FromLeft(new ErrorResult { Message = "Unauthorized" });
+        if (request.UserId == Guid.Empty) return new Error("Invalid user");  // implicit Left
+        return Unit.Value;                                                    // implicit Right
     })
 ```
 
-#### Benefits of Guards
+**Behavior:**
+- Runs before any step and before the payload is created
+- First failing guard short-circuits — subsequent guards do not run
+- On failure: returns `Left(error)`, pipeline does not execute
 
-- Guards run before the payload is created, providing the earliest possible short-circuit
-- The `guards` phase is structurally separate from the `steps` phase — it is impossible to
-  accidentally register a guard after a step
-- Common checks like authentication can be standardized and reused
+### Validate
 
-### Activities
-
-Activities are the building blocks of a railway. They process the payload and can produce either a success (with
-the modified payload) or an error.
+Like `Guard` but uses `Option<TError>` — return `Some(error)` to reject or `None` to allow. Suited for input validation rules.
 
 ```csharp
-// Asynchronous activity
-.Do(async (payload, cancellationToken) =>
+guards: g => g
+    .Validate(request => string.IsNullOrEmpty(request.Name)
+        ? Option<Error>.Some(new Error("Name is required"))
+        : Option<Error>.None)
+
+    .Validate(async (request, ct) =>
+    {
+        var exists = await db.ExistsAsync(request.Id, ct);
+        return exists ? Option<Error>.None : Option<Error>.Some(new Error("Not found"));
+    })
+```
+
+**Behavior:**
+- Validations run before guards
+- First failing validation short-circuits
+- On failure: returns `Left(error)`, pipeline does not execute
+
+---
+
+## Step Operators
+
+All step operators are registered on `RailwayStepsBuilder` inside the `steps` lambda.
+
+The most important distinction between operators is **whether their result is fed back into the pipeline**:
+
+- **Payload-replacing** (`Do`, `Branch`, `Recover`) — the operator's return value becomes the new pipeline state. Downstream operators see the updated payload.
+- **Pass-through** (`Tap`, `TryTap`, `Effects`, `TryEffects`, `Ensure`) — the operator reads the payload but its return value is **not** fed back. The payload flowing to the next operator is identical to what came in.
+- **Fire-and-forget** (`Detach`) — result is discarded and nothing is awaited.
+- **Out-of-band** (`Finally`) — runs outside the pipeline; its return value is discarded and does not affect the pipeline result.
+
+### Do
+
+The primary progression operator. Executes a delegate that may transform the payload or return an error.
+
+```csharp
+// Async
+.Do(async (payload, ct) =>
 {
-    var result = await ProcessAsync(payload, cancellationToken);
-    return Either<ErrorResult, Payload>.FromRight(result);
+    var result = await externalService.ProcessAsync(payload.Data, ct);
+    if (!result.Success) return new Error(result.Message);  // implicit Left
+    payload.Result = result.Value;
+    return payload;  // implicit Right
 })
 
-// Synchronous activity
+// Sync
 .Do(payload =>
 {
-    var result = Process(payload);
-    return Either<ErrorResult, Payload>.FromRight(result);
+    payload.Price = payload.Quantity * payload.UnitPrice;
+    return payload;  // implicit Right
+})
+```
+
+**Behavior:**
+- **Result is fed back into the pipeline.** Whatever `Either` the delegate returns becomes the new pipeline state — downstream operators see the new payload on `Right`, or the error on `Left`.
+- **On Right:** executes the delegate with the current payload; returns its result as the new state
+- **On Left:** skips — the existing error propagates unchanged
+
+---
+
+### Ensure
+
+Asserts that a business rule holds. Fails the pipeline when the predicate returns `false`.
+
+```csharp
+.Ensure(
+    when:     payload => payload.Items.Count > 0,
+    failWith: payload => new Error("Order must have at least one item")
+)
+```
+
+**Behavior:**
+- **Result is NOT fed back.** No new payload is produced. The existing payload either passes through unchanged or the pipeline is switched to the error rail.
+- **On Right:** evaluates `when(payload)` — if `false`, transitions to `Left(failWith(payload))`; if `true`, the existing state passes through unchanged
+- **On Left:** skips without evaluating the predicate
+
+---
+
+### Tap
+
+A strict pass-through side effect. The payload is never changed. Exceptions propagate to the caller.
+
+Three overloads:
+
+```csharp
+// Sync — fire and forget
+.Tap(payload => logger.LogInformation("Processing order {Id}", payload.Id))
+
+// Async — fire and forget
+.Tap(async (payload, ct) =>
+{
+    await auditLog.RecordAsync(payload.Id, ct);
 })
 
-// Multiple activities
-.DoAll(
-    payload => DoFirstThing(payload),
-    payload => DoSecondThing(payload),
-    payload => DoThirdThing(payload)
-)
+// Async with error channel — can fail the pipeline
+.Tap(async (payload, ct) =>
+{
+    var ok = await notificationService.SendAsync(payload.Email, ct);
+    if (!ok) return new Error("Notification failed");  // implicit Left
+    return Unit.Value;                                  // implicit Right
+})
 ```
 
-### Conditional Activities
+**Behavior:**
+- **Result is NOT fed back.** The payload flowing to the next operator is the same one that came in.
+- **On Right:** executes the side effect; the existing state passes through unchanged. The `Either<TError, Unit>` overload can switch the pipeline to the error rail, but the payload is still not replaced.
+- **On Left:** skips without invoking the delegate
 
-Activities that only execute if a condition is met.
+---
+
+### TryTap
+
+Like `Tap` but swallows all exceptions. Use when the side effect is best-effort and must never fail the pipeline.
 
 ```csharp
-.DoIf(
-    payload => payload.ShouldProcess, // Condition
-    payload =>
+// Sync
+.TryTap(payload => metrics.Increment("orders.created"))
+
+// Async
+.TryTap(async (payload, ct) =>
+{
+    await cache.InvalidateAsync(payload.CacheKey, ct);
+})
+```
+
+**Behavior:**
+- **Result is NOT fed back.** The payload flowing to the next operator is the same one that came in.
+- **On Right:** executes the side effect; exceptions are swallowed; the existing state passes through unchanged regardless of failure
+- **On Left:** skips without invoking the delegate
+
+---
+
+### Effects
+
+Groups multiple strict side effects. Executes them in registration order using an inner `EffectsBuilder`. The first failure short-circuits the group.
+
+```csharp
+.Effects(fx => fx
+    .Do(payload => auditLog.Record(payload.Id))
+    .Do(async (payload, ct) => await emailService.SendConfirmationAsync(payload.Email, ct))
+    .Do(async (payload, ct) =>
     {
-        // Activity that only executes if the condition is true
-        payload.Data = Process(payload.Data);
-        return Either<ErrorResult, Payload>.FromRight(payload);
-    }
+        var result = await inventoryService.ReserveAsync(payload.Items, ct);
+        if (!result.IsSuccess) return new Error("Insufficient stock");
+        return Unit.Value;
+    })
 )
 ```
 
-### Groups
+**Behavior:**
+- **Result is NOT fed back.** Inner effects signal success or failure via `Either<TError, Unit>` — they cannot produce a new payload. The payload flowing to the next operator is the same one that came in.
+- **On Right:** runs each inner effect in order; the first `Left` result short-circuits the group and switches the pipeline to the error rail; on success the existing state passes through unchanged
+- **On Left:** skips the entire group
 
-Organize related activities into logical groups. Groups can have conditions and always merge their results back to the
-main railway.
+---
+
+### TryEffects
+
+Like `Effects` but best-effort — exceptions and errors from every inner effect are swallowed, and all effects are always attempted regardless of failures.
 
 ```csharp
-.Group(
-    payload => payload.ShouldProcessGroup, // Optional condition
-    group => group
-        .Do(payload => FirstActivity(payload))
-        .Do(payload => SecondActivity(payload))
-        .Do(payload => ThirdActivity(payload))
+.TryEffects(fx => fx
+    .Do(payload => metrics.Increment("orders.processed"))
+    .Do(async (payload, ct) => await cache.WarmAsync(payload.Id, ct))
 )
 ```
 
-### Contexts with Local State
+**Behavior:**
+- **Result is NOT fed back.** Like `Effects`, but every inner effect is always attempted and all failures are silently swallowed. The payload flowing to the next operator is the same one that came in.
+- **On Right:** runs all inner effects in order; exceptions swallowed; the existing state passes through unchanged
+- **On Left:** skips the entire group
 
-Create a context with the local state that is accessible to all activities within the context. This helps encapsulate
-related operations.
+---
+
+### Detach
+
+Fires a group of effects in the background (`Task.Run`) without awaiting their completion. The pipeline continues immediately on the `Right` rail. Exceptions inside detached effects are always swallowed.
 
 ```csharp
-.WithContext(
-    null, // No condition, always execute
-    payload => new LocalState { Counter = 0 }, // Create local state
-    context => context
-        .Do((payload, state) =>
-        {
-            state.Counter++;
-            return (payload, state);
-        })
-        .Do((payload, state) =>
-        {
-            payload.Result = $"Counted to {state.Counter}";
-            return (payload, state);
-        })
+.Detach(fx => fx
+    .Do(async (payload, ct) => await analyticsService.TrackAsync(payload.EventData, ct))
+    .Do(payload => slowSideEffect.Execute(payload))
 )
 ```
 
-### Parallel Execution
+**Behavior:**
+- **Result is discarded entirely.** Inner effects run on background threads and are never awaited. Their return values — success or failure — are completely ignored. The pipeline continues immediately with the same state it had before `Detach`.
+- **On Right:** schedules each inner effect on `Task.Run`; returns immediately; the existing state passes through unchanged
+- **On Left:** skips — nothing is scheduled
+- Exceptions inside detached tasks are always swallowed
 
-Execute multiple groups of activities in parallel and merge the results.
+> Use `Detach` for fire-and-forget work that must never block the pipeline and whose failure is acceptable (analytics, non-critical logging, cache warming).
 
-```csharp
-.Parallel(
-    null, // No condition, always execute
-    parallel => parallel
-        .Group(group => group
-            .Do(payload => { payload.Result1 = "Result 1"; return payload; })
-        )
-        .Group(group => group
-            .Do(payload => { payload.Result2 = "Result 2"; return payload; })
-        )
-)
-```
+---
 
-### Detached Execution
+### Branch
 
-Execute activities in the background without waiting for their completion. Results from detached activities are not
-merged back into the main railway.
+Conditionally enters a sub-pipeline when the predicate returns `true`. The sub-pipeline shares the same `Either<TError, TPayload>` state. When the predicate returns `false`, the operator is a no-op.
+
+The inner builder (`BranchBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `Recover`, and `Ensure`. `Branch`, `Detach`, and `Finally` are intentionally excluded.
 
 ```csharp
-.Detach(
-    null, // No condition, always execute
-    detached => detached
+.Branch(
+    when:   payload => payload.CustomerType == CustomerType.Premium,
+    branch: b => b
         .Do(payload =>
         {
-            // This runs in the background
-            LogActivity(payload);
-            return payload;
+            payload.Discount = 0.20m;
+            return payload;  // implicit Right
         })
-)
-```
-
-### Parallel Detached Execution
-
-Execute multiple groups of detached activities in parallel without waiting for completion.
-
-```csharp
-.ParallelDetached(
-    null, // No condition, always execute
-    parallelDetached => parallelDetached
-        .Detached(detached => detached
-            .Do(payload => { LogActivity1(payload); return payload; })
-        )
-        .Detached(detached => detached
-            .Do(payload => { LogActivity2(payload); return payload; })
+        .Tap(payload => logger.LogInformation("Premium discount applied"))
+        .Ensure(
+            when:     p => p.Discount <= 1.0m,
+            failWith: p => new Error("Discount cannot exceed 100%")
         )
 )
 ```
 
-### Finally Block
+**Behavior:**
+- **Result IS fed back into the pipeline.** The sub-pipeline's final `Either` state replaces the main pipeline state — downstream operators see whatever payload (or error) the branch produced.
+- **On Right, predicate true:** runs the sub-pipeline; its final state becomes the new main pipeline state
+- **On Right, predicate false:** no-op, the existing state passes through unchanged
+- **On Left:** skips — predicate is not evaluated
 
-Activities that always execute, even if the railway fails.
+---
+
+### Recover
+
+Recovers from a typed error. When the pipeline is on `Left` and the error value is assignable to `TErr`, the handler runs and its returned payload transitions the pipeline back to `Right`. Non-matching errors and `Right` values pass through unchanged.
+
+The handler receives the **pre-failure payload snapshot** — the last `Right` payload before the error occurred.
 
 ```csharp
-.Finally(payload =>
+// Sync
+.Recover<ValidationError>((err, lastPayload) =>
 {
-    // Cleanup or logging
-    CleanupResources(payload);
-    return Either<ErrorResult, Payload>.FromRight(payload);
+    lastPayload.IsValid = false;
+    lastPayload.ValidationMessage = err.Message;
+    return lastPayload;
+})
+
+// Async
+.Recover<TimeoutError>(async (err, lastPayload, ct) =>
+{
+    var fallback = await fallbackService.GetAsync(lastPayload.Id, ct);
+    lastPayload.Result = fallback;
+    return lastPayload;
 })
 ```
 
-## Advanced Patterns
+**Behavior:**
+- **Result IS fed back into the pipeline.** The handler's returned payload replaces the pipeline state, transitioning from `Left` back to `Right`. Downstream operators see the recovered payload.
+- **On Left, matching `TErr`:** runs the handler with `(error, lastRightSnapshot)` → the returned payload becomes the new `Right` state
+- **On Left, non-matching type:** the existing `Left` passes through unchanged
+- **On Right:** skips — the existing state passes through unchanged
 
-### Error Handling
+---
+
+### Finally
+
+Registers one or more cleanup activities that **always execute**, regardless of whether the pipeline succeeded or failed. Multiple `Finally` registrations are all run in order. Exceptions thrown by a `Finally` activity are swallowed so that subsequent `Finally` activities always get a chance to run.
+
+The activity receives the **last known `Right` payload** — if the pipeline never reached `Right`, this is the initial payload.
 
 ```csharp
-.Do(payload =>
+// Sync
+.Finally(payload => dbConnection.Close())
+
+// Async
+.Finally(async (payload, ct) =>
 {
-    try
-    {
-        var result = RiskyOperation(payload);
-        return Either<ErrorResult, Payload>.FromRight(result);
-    }
-    catch (Exception ex)
-    {
-        return Either<ErrorResult, Payload>.FromLeft(new ErrorResult { Message = ex.Message });
-    }
+    await tempFileService.DeleteAsync(payload.TempFileId, ct);
 })
 ```
 
-### Conditional Branching
+**Behavior:**
+- **Result is discarded entirely.** `Finally` callbacks run outside the pipeline state machine. Their return value has no effect on the `Either` result — success or failure inside `Finally` is irrelevant to downstream callers.
+- Always executes regardless of whether the pipeline is on `Right` or `Left`
+- Receives the last known `Right` payload (the pre-failure snapshot if the pipeline failed)
+- Exceptions are swallowed so that subsequent `Finally` callbacks always get a chance to run
 
-Use conditions to determine which path to take in a railway.
+---
 
-```csharp
-.Group(
-    payload => payload.Type == "TypeA",
-    group => group
-        .Do(payload => ProcessTypeA(payload))
-)
-.Group(
-    payload => payload.Type == "TypeB",
-    group => group
-        .Do(payload => ProcessTypeB(payload))
-)
+## Operator Quick Reference
+
+| Operator | Result fed back? | On Right | On Left | Exceptions |
+|----------|-----------------|----------|---------|------------|
+| `Do` | **Yes** — new payload or error | Executes; result is the new state | Skips | Propagate |
+| `Ensure` | No — payload unchanged | Fails pipeline if predicate false | Skips | — |
+| `Tap` | No — payload unchanged | Runs side effect; state passes through; `Either<TError,Unit>` overload can switch to error rail | Skips | Propagate |
+| `TryTap` | No — payload unchanged | Runs side effect; state passes through | Skips | Swallowed |
+| `Effects` | No — payload unchanged | Runs group; first failure switches to error rail | Skips | Propagate |
+| `TryEffects` | No — payload unchanged | Runs all; state passes through | Skips | Swallowed |
+| `Detach` | No — discarded entirely | Schedules background tasks; returns immediately | Skips | Swallowed |
+| `Branch` | **Yes** — sub-pipeline result | Runs sub-pipeline if predicate true; result is the new state | Skips | Propagate |
+| `Recover<TErr>` | **Yes** — recovered payload | Skips | Matching error: handler result becomes new Right | Propagate |
+| `Finally` | No — discarded entirely | Always runs; result ignored | Always runs; result ignored | Swallowed |
+
+---
+
+## MediatR Integration
+
+Install the companion package:
+
+```bash
+dotnet add package Zooper.Bee.MediatR
 ```
 
-## Dependency Injection Integration
-
-Zooper.Bee integrates seamlessly with .NET's dependency injection system. You can register all railway components with
-a single extension method:
+Extend `RailwayHandler<TRequest, TPayload, TSuccess, TError>`:
 
 ```csharp
-// In Startup.cs or Program.cs
-services.AddRailways();
+public class CreateOrderHandler
+    : RailwayHandler<CreateOrderCommand, OrderPayload, OrderId, OrderError>
+{
+    protected override Func<CreateOrderCommand, OrderPayload> Factory =>
+        cmd => new OrderPayload(cmd.CustomerId, cmd.Items);
+
+    protected override Func<OrderPayload, OrderId> Selector =>
+        payload => new OrderId(payload.Id);
+
+    // Optional — omit if no guards needed
+    protected override void ConfigureGuards(
+        RailwayGuardBuilder<CreateOrderCommand, OrderPayload, OrderId, OrderError> g)
+    {
+        g.Guard(cmd =>
+        {
+            if (cmd.CustomerId == Guid.Empty) return new OrderError("Invalid customer");  // implicit Left
+            return Unit.Value;                                                              // implicit Right
+        });
+    }
+
+    protected override void ConfigureSteps(
+        RailwayStepsBuilder<CreateOrderCommand, OrderPayload, OrderId, OrderError> s)
+    {
+        s.Do(payload =>
+         {
+             payload.TotalPrice = payload.Items.Sum(i => i.Price);
+             return payload;  // implicit Right
+         })
+         .Tap(payload => logger.LogInformation("Order {Id} created", payload.Id))
+         .Finally(payload => tempStorage.Release(payload.TempKey));
+    }
+}
 ```
 
-This will scan all assemblies and register:
-
-- All railway validations
-- All railway activities
-- All concrete railway classes (classes ending with "Railway")
-
-You can also register specific components:
-
-```csharp
-// Register only validations
-services.AddRailwayValidations();
-
-// Register only activities
-services.AddRailwayActivities();
-
-// Specify which assemblies to scan
-services.AddRailways(new[] { typeof(Program).Assembly });
-
-// Specify service lifetime (Singleton, Scoped, Transient)
-services.AddRailways(lifetime: ServiceLifetime.Singleton);
-```
-
-## Performance Considerations
-
-- Use `Parallel` for CPU-bound operations that can benefit from parallel execution
-- Use `Detach` for I/O operations that don't affect the main railway
-- Be mindful of resource contention in parallel operations
-- Consider using `WithContext` to maintain state between related activities
-
-## Best Practices
-
-1. Keep activities small and focused on a single responsibility
-2. Use descriptive names for your railway methods
-3. Group related activities together
-4. Handle errors at appropriate levels
-5. Use `Finally` for cleanup operations
-6. Validate requests early to fail fast
-7. Use contextual state to avoid passing too many parameters
-
-## Migration from `RailwayBuilder` to `Railway.Create()`
-
-As of the latest version, `RailwayBuilder` and `RailwayBuilderFactory` are `[Obsolete]`.
-Use `Railway.Create()` instead.
-
-### Before
-
-```csharp
-var railway = new RailwayBuilder<Request, Payload, Success, Error>(
-        request => new Payload(request),
-        payload => new Success(payload.Result))
-    .Guard(request => /* ... */)
-    .Validate(request => /* ... */)
-    .Do(payload => /* ... */)
-    .Group(null, g => g.Do(payload => /* ... */))
-    .Build();
-```
-
-### After
-
-```csharp
-var railway = Railway.Create<Request, Payload, Success, Error>(
-    factory:  request => new Payload(request),
-    selector: payload => new Success(payload.Result),
-    guards: g => g
-        .Guard(request => /* ... */)
-        .Validate(request => /* ... */),
-    steps: s => s
-        .Do(payload => /* ... */)
-        .Group(null, g => g.Do(payload => /* ... */)));
-```
-
-## Migration from Workflow to Railway
-
-As of the latest version, all `Workflow` classes have been renamed to `Railway` to better reflect the railway-oriented programming pattern used by the library. The old `Workflow` names are preserved as `[Obsolete]` shims for backward compatibility.
-
-### What changed
-
-| Old Name | New Name |
-|---|---|
-| `Workflow<TRequest, TSuccess, TError>` | `Railway<TRequest, TSuccess, TError>` |
-| `WorkflowBuilder<...>` | `RailwayBuilder<...>` |
-| `WorkflowBuilderFactory` | `RailwayBuilderFactory` |
-| `CreateWorkflow<...>()` | `CreateRailway<...>()` |
-| `IWorkflowStep` | `IRailwayStep` |
-| `IWorkflowValidation` | `IRailwayValidation` |
-| `IWorkflowGuard` | `IRailwayGuard` |
-| `AddWorkflows()` | `AddRailways()` |
-| `AddWorkflowSteps()` | `AddRailwaySteps()` |
-
-### Backward compatibility
-
-All old type names and extension methods are still available but marked with `[Obsolete]`. Your existing code will continue to compile and work, but you will see deprecation warnings encouraging you to migrate to the new names.
-
-### How to migrate
-
-1. Replace all `Workflow<` type references with `Railway<`
-2. Replace `WorkflowBuilder<` with `RailwayBuilder<`
-3. Replace `WorkflowBuilderFactory.CreateWorkflow<` with `RailwayBuilderFactory.CreateRailway<`
-4. Replace DI registration calls (`AddWorkflows()` -> `AddRailways()`, etc.)
-5. Update any interface implementations (`IWorkflowStep` -> `IRailwayStep`, etc.)
+---
 
 ## License
 
-MIT License (Copyright details here)
+MIT License

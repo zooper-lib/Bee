@@ -1,3 +1,5 @@
+using System;
+using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Xunit;
@@ -7,198 +9,62 @@ namespace Zooper.Bee.Tests;
 
 public class RailwayTests
 {
-	#region Test Models
-	// Request model
-	private record TestRequest(string Name, int Value);
+	private record Req(string Name, int Value);
+	private record Pay(string Name, int Value, string? Result = null);
+	private record Succ(string Result);
+	private record Err(string Code);
 
-	// Payload model
-	private record TestPayload(
-		string Name,
-		int Value,
-		bool IsValidated = false,
-		bool IsProcessed = false,
-		string? Result = null);
-
-	// Success result model
-	private record TestSuccess(string Result);
-
-	// Error model
-	private record TestError(string Code, string Message);
-	#endregion
+	private static Railway<Req, Succ, Err> Build(
+		Action<RailwayStepsBuilder<Req, Pay, Succ, Err>> configure)
+		=> Railway.Create<Req, Pay, Succ, Err>(
+			r => new Pay(r.Name, r.Value),
+			p => new Succ(p.Result ?? ""),
+			configure);
 
 	[Fact]
-	public async Task Execute_ValidRequest_ReturnsSuccessResult()
+	public async Task Do_Sync_TransformsPayload()
 	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			// Create the payload from the request
-			request => new TestPayload(request.Name, request.Value),
-
-			// Create the success result from the payload
-			payload => new TestSuccess(payload.Result ?? "Default")
-		)
-		.Do(payload =>
-		{
-			// Validate the payload
-			var validated = payload with { IsValidated = true };
-			return Either<TestError, TestPayload>.FromRight(validated);
-		})
-		.Do(payload =>
-		{
-			// Process the payload
-			var processed = payload with
-			{
-				IsProcessed = true,
-				Result = $"Processed: {payload.Name}-{payload.Value}"
-			};
-			return Either<TestError, TestPayload>.FromRight(processed);
-		})
-		.Build();
-
-		var request = new TestRequest("Test", 42);
-
-		// Act
-		var result = await workflow.Execute(request);
-
-		// Assert
+		var railway = Build(b => b
+			.Do(p => Either<Err, Pay>.FromRight(p with { Result = "ok" })));
+		var result = await railway.Execute(new Req("x", 1));
 		result.IsRight.Should().BeTrue();
-		result.Right.Result.Should().Be("Processed: Test-42");
+		result.Right.Result.Should().Be("ok");
 	}
 
 	[Fact]
-	public async Task Execute_WithValidation_RejectsInvalidRequest()
+	public async Task Do_ReturnsLeft_SubsequentDoSkipped()
 	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value),
-			payload => new TestSuccess(payload.Result ?? "Default")
-		)
-		.Validate(request =>
-		{
-			if (request.Value <= 0)
-			{
-				return Option<TestError>.Some(new TestError("INVALID_VALUE", "Value must be positive"));
-			}
-			return Option<TestError>.None();
-		})
-		.Do(payload => Either<TestError, TestPayload>.FromRight(payload with { IsProcessed = true }))
-		.Build();
-
-		var invalidRequest = new TestRequest("Test", -5);
-
-		// Act
-		var result = await workflow.Execute(invalidRequest);
-
-		// Assert
+		bool secondCalled = false;
+		var railway = Build(b => b
+			.Do(_ => Either<Err, Pay>.FromLeft(new Err("E1")))
+			.Do(p => { secondCalled = true; return Either<Err, Pay>.FromRight(p); }));
+		var result = await railway.Execute(new Req("x", 1));
 		result.IsLeft.Should().BeTrue();
-		result.Left.Code.Should().Be("INVALID_VALUE");
-		result.Left.Message.Should().Be("Value must be positive");
+		secondCalled.Should().BeFalse();
 	}
 
 	[Fact]
-	public async Task Execute_WithConditionalActivity_OnlyExecutesWhenConditionMet()
+	public async Task Ensure_FailsWhenConditionFalse()
 	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value),
-			payload => new TestSuccess(payload.Result ?? "Default")
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { IsValidated = true }))
-		.DoIf(
-			// Condition: Value is greater than 50
-			payload => payload.Value > 50,
-			// Activity to execute when condition is true
-			payload => Either<TestError, TestPayload>.FromRight(
-				payload with { Result = "High Value Processing" })
-		)
-		.DoIf(
-			// Condition: Value is less than or equal to 50
-			payload => payload.Value <= 50,
-			// Activity to execute when condition is true
-			payload => Either<TestError, TestPayload>.FromRight(
-				payload with { Result = "Standard Processing" })
-		)
-		.Build();
-
-		var lowValueRequest = new TestRequest("Test", 42);
-		var highValueRequest = new TestRequest("Test", 100);
-
-		// Act
-		var lowValueResult = await workflow.Execute(lowValueRequest);
-		var highValueResult = await workflow.Execute(highValueRequest);
-
-		// Assert
-		lowValueResult.Right.Result.Should().Be("Standard Processing");
-		highValueResult.Right.Result.Should().Be("High Value Processing");
-	}
-
-	[Fact]
-	public async Task Execute_WithErrorInActivity_ReturnsError()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value),
-			payload => new TestSuccess(payload.Result ?? "Default")
-		)
-		.Do(payload =>
-		{
-			if (payload.Value == 0)
-			{
-				return Either<TestError, TestPayload>.FromLeft(
-					new TestError("ZERO_VALUE", "Value cannot be zero"));
-			}
-			return Either<TestError, TestPayload>.FromRight(
-				payload with { IsValidated = true });
-		})
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { IsProcessed = true }))
-		.Build();
-
-		var zeroValueRequest = new TestRequest("Test", 0);
-
-		// Act
-		var result = await workflow.Execute(zeroValueRequest);
-
-		// Assert
+		var railway = Build(b => b
+			.Ensure(p => p.Value > 0, p => new Err("NEG")));
+		var result = await railway.Execute(new Req("x", -1));
 		result.IsLeft.Should().BeTrue();
-		result.Left.Code.Should().Be("ZERO_VALUE");
+		result.Left.Code.Should().Be("NEG");
 	}
 
 	[Fact]
-	public async Task Execute_WithFinallyActivities_ExecutesThemEvenOnError()
+	public async Task Guard_BlocksExecutionBeforeSteps()
 	{
-		// Arrange
-		bool finallyExecuted = false;
-
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value),
-			payload => new TestSuccess(payload.Result ?? "Default")
-		)
-		.Do(payload =>
-		{
-			if (payload.Value < 0)
-			{
-				return Either<TestError, TestPayload>.FromLeft(
-					new TestError("NEGATIVE_VALUE", "Value cannot be negative"));
-			}
-			return Either<TestError, TestPayload>.FromRight(
-				payload with { IsValidated = true });
-		})
-		.Finally(payload =>
-		{
-			finallyExecuted = true;
-			return Either<TestError, TestPayload>.FromRight(payload);
-		})
-		.Build();
-
-		var invalidRequest = new TestRequest("Test", -10);
-
-		// Act
-		var result = await workflow.Execute(invalidRequest);
-
-		// Assert
-		result.IsLeft.Should().BeTrue();
-		finallyExecuted.Should().BeTrue();
+		var railway = Railway.Create<Req, Pay, Succ, Err>(
+			r => new Pay(r.Name, r.Value),
+			p => new Succ(p.Result ?? ""),
+			guards => guards.Guard(r => r.Value > 0
+				? Either<Err, Unit>.FromRight(Unit.Value)
+				: Either<Err, Unit>.FromLeft(new Err("GUARD"))),
+			steps => steps.Do(p => Either<Err, Pay>.FromRight(p with { Result = "ok" })));
+		var badResult = await railway.Execute(new Req("x", -1));
+		badResult.IsLeft.Should().BeTrue();
+		badResult.Left.Code.Should().Be("GUARD");
 	}
 }
