@@ -2,164 +2,42 @@ using System;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Xunit;
-using Zooper.Fox;
 using Zooper.Bee.Extensions;
+using Zooper.Fox;
 
 namespace Zooper.Bee.Tests;
 
 public class ParameterlessRailwayTests
 {
-	#region Test Models
+    private record Pay(string Status = "Waiting");
+    private record Succ(string Status);
+    private record Err(string Code);
 
-	// Payload model for tests
-	private record TestPayload(DateTime StartTime, string Status = "Waiting");
+    [Fact]
+    public async Task ParameterlessRailway_Execute_Success()
+    {
+        var railway = Railway.Create<Pay, Succ, Err>(
+            () => new Pay(),
+            p => new Succ(p.Status),
+            b => b
+                .Do(p => Either<Err, Pay>.FromRight(p with { Status = "Done" })));
 
-	// Success result model
-	private record TestSuccess(string Status, bool IsComplete);
+        var result = await railway.Execute();
+        result.IsRight.Should().BeTrue();
+        result.Right.Status.Should().Be("Done");
+    }
 
-	// Error model
-	private record TestError(string Code, string Message);
+    [Fact]
+    public async Task ParameterlessRailway_Execute_Error()
+    {
+        var railway = Railway.Create<Pay, Succ, Err>(
+            () => new Pay(),
+            p => new Succ(p.Status),
+            b => b
+                .Do(_ => Either<Err, Pay>.FromLeft(new Err("FAIL"))));
 
-	#endregion
-
-	[Fact]
-	public async Task ParameterlessRailway_UsingUnitType_CanBeExecuted()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<Unit, TestPayload, TestSuccess, TestError>(
-				// Convert Unit to initial payload
-				_ => new TestPayload(DateTime.UtcNow),
-
-				// Convert final payload to success result
-				payload => new TestSuccess(payload.Status, true)
-			)
-			.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with
-					{
-						Status = "Processing"
-					}
-				)
-			)
-			.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with
-					{
-						Status = "Completed"
-					}
-				)
-			)
-			.Build();
-
-		// Act
-		var result = await workflow.Execute(Unit.Value);
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.Status.Should().Be("Completed");
-		result.Right.IsComplete.Should().BeTrue();
-	}
-
-	[Fact]
-	public async Task ParameterlessRailway_UsingFactory_CanBeExecuted()
-	{
-		// Arrange
-		var workflow = RailwayBuilderFactory.CreateRailway<TestPayload, TestSuccess, TestError>(
-			// Initial payload factory
-			() => new TestPayload(DateTime.UtcNow),
-
-			// Result selector
-			payload => new TestSuccess(payload.Status, true),
-
-			// Configure the railway
-			builder => builder
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-						payload with
-						{
-							Status = "Processing"
-						}
-					)
-				)
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-						payload with
-						{
-							Status = "Completed"
-						}
-					)
-				)
-		);
-
-		// Act
-		var result = await workflow.Execute();
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.Status.Should().Be("Completed");
-		result.Right.IsComplete.Should().BeTrue();
-	}
-
-	[Fact]
-	public async Task ParameterlessRailway_UsingExtensionMethod_CanBeExecuted()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<Unit, TestPayload, TestSuccess, TestError>(
-				_ => new TestPayload(DateTime.UtcNow),
-				payload => new TestSuccess(payload.Status, true)
-			)
-			.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with
-					{
-						Status = "Processing"
-					}
-				)
-			)
-			.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with
-					{
-						Status = "Completed"
-					}
-				)
-			)
-			.Build();
-
-		// Act - using extension method (no parameters)
-		var result = await workflow.Execute();
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.Status.Should().Be("Completed");
-		result.Right.IsComplete.Should().BeTrue();
-	}
-
-	[Fact]
-	public async Task ParameterlessRailway_WithError_ReturnsError()
-	{
-		// Arrange
-		var workflow = RailwayBuilderFactory.Create<TestPayload, TestSuccess, TestError>(
-				() => new TestPayload(DateTime.UtcNow),
-				payload => new TestSuccess(payload.Status, true)
-			)
-			.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with
-					{
-						Status = "Processing"
-					}
-				)
-			)
-			.Do(payload =>
-				{
-					// Simulate an error in the railway
-					return Either<TestError, TestPayload>.FromLeft(
-						new TestError("PROCESSING_FAILED", "Failed to complete processing")
-					);
-				}
-			)
-			.Build();
-
-		// Act
-		var result = await workflow.Execute();
-
-		// Assert
-		result.IsLeft.Should().BeTrue();
-		result.Left.Code.Should().Be("PROCESSING_FAILED");
-		result.Left.Message.Should().Be("Failed to complete processing");
-	}
+        var result = await railway.Execute();
+        result.IsLeft.Should().BeTrue();
+        result.Left.Code.Should().Be("FAIL");
+    }
 }
