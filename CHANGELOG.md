@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-04-21
+
+### Added
+
+- **New operator vocabulary on `RailwayStepsBuilder`** — explicit Either-flowing pipeline
+  - `Do(sync)` / `Do(async)` — transform payload, can return Left to signal failure
+  - `Ensure(predicate, failWith)` — assert a condition; returns Left when predicate is false
+  - `Branch(when, configure)` — conditional sub-pipeline with its own `Recover` scope; skips on Left
+  - `Tap(sync)` / `Tap(async-no-return)` / `Tap(async-Either)` — observe payload; passes through on Right; throws rethrown to caller
+  - `TryTap(sync)` / `TryTap(async)` — best-effort observe; exceptions are silently swallowed
+  - `Effects(configure)` — strict side-effect group via `EffectsBuilder`; can return Left to fail pipeline
+  - `TryEffects(configure)` — best-effort side-effect group; exceptions silently swallowed per-effect
+  - `Detach(configure)` — fire-and-forget side effects; never blocks the pipeline; exceptions silently swallowed
+  - `Recover<TErr>(sync)` / `Recover<TErr>(async)` — typed error recovery; uses pre-failure payload snapshot; no-op when state is already Right or error type does not match
+  - `Finally(sync)` / `Finally(async)` — guaranteed cleanup; runs after all operators regardless of state; multiple Finally activities run independently (exceptions swallowed per-activity)
+- **`EffectsBuilder<TPayload, TError>`** — inner builder for `Effects`, `TryEffects`, `Detach`; exposes `Do(Action)`, `Do(async Task)`, `Do(async Task<Either>)`
+- **`BranchBuilder<TPayload, TError>`** — inner builder for `Branch`; exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `Recover<TErr>`, `Ensure`
+- **Pre-failure payload snapshot** (`lastRight`) — threaded through the executor so `Recover` always receives the payload from before the error occurred
+- **`RailwayHandler<TRequest, TPayload, TSuccess, TError>`** updated in `Zooper.Bee.MediatR` — now uses `ConfigureGuards` + `ConfigureSteps` instead of `ConfigureRailway(RailwayBuilder)`
+
+### Changed
+
+- `RailwayStepsBuilder` executor is now **Either-flowing** (no short-circuit at executor level) — each operator receives the full `Either` state and decides whether to act
+- `Zooper.Bee.MediatR.WorkflowHandler` now extends `RailwayHandler` and delegates to `ConfigureSteps`
+
+### Removed
+
+- **`RailwayBuilder<TRequest, TPayload, TSuccess, TError>`** and **`RailwayBuilderFactory`** — replaced by `Railway.Create()`
+- **`WorkflowBuilder`** and **`WorkflowBuilderFactory`** — use `Railway.Create()` directly
+- **`BranchWithLocalPayloadBuilder`** and corresponding internals
+- Operators removed from `RailwayStepsBuilder`: `DoIf`, `DoAll`, `Group`, `Parallel`, `ParallelDetached`, `WithContext`, old `Detach(condition, configure)`
+- Features removed: `Group`, `Parallel`, `ParallelDetached`, `WithContext` / `Context`, `Detached` (old form)
+- Internal executors removed: `GroupExecutor`, `ParallelExecutor`, `ParallelDetachedExecutor`, `ContextExecutor`, `DetachedExecutor`, `FeatureExecutorFactory`, `FeatureExecutorBase`
+
+### Migration Guide
+
+| v3.x | v4.0 |
+|------|------|
+| `new RailwayBuilder<Req, Pay, Succ, Err>(factory, selector)` | `Railway.Create<Req, Pay, Succ, Err>(factory, selector, steps => ...)` |
+| `.Do(p => Either...)` | `.Do(p => Either...)` *(unchanged)* |
+| `.DoIf(when, step)` | `.Branch(when, b => b.Do(step))` |
+| `.Group(when, b => b.Do(...))` | `.Branch(when, b => b.Do(...))` |
+| `.Parallel(...)` / `.ParallelDetached(...)` | `.Detach(eff => eff.Do(...))` |
+| `.WithContext(...)` | embed state directly in your payload record |
+| `.Detach(condition, configure)` | `.Branch(condition, b => b)` + `.Detach(configure)` |
+| `ConfigureRailway(RailwayBuilder)` in MediatR | `ConfigureSteps(RailwayStepsBuilder)` |
+
 ## [3.5.0] - 2026-04-01
 
 ### Added

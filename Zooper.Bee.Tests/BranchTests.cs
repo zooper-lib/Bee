@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Xunit;
@@ -7,247 +8,99 @@ namespace Zooper.Bee.Tests;
 
 public class BranchTests
 {
-	#region Test Models
-	// Request model
-	private record TestRequest(string Name, int Value, string Category);
+    private record Req(string Category, int Value);
+    private record Pay(string Category, int Value, string? Result = null);
+    private record Succ(string? Result);
+    private record Err(string Code);
 
-	// Payload model
-	private record TestPayload(
-		string Name,
-		int Value,
-		string Category,
-		bool IsStandardProcessed = false,
-		bool IsPremiumProcessed = false,
-		string? ProcessingResult = null);
+    private static Railway<Req, Succ, Err> Build(
+        Action<RailwayStepsBuilder<Req, Pay, Succ, Err>> configure)
+        => Railway.Create<Req, Pay, Succ, Err>(
+            r => new Pay(r.Category, r.Value),
+            p => new Succ(p.Result),
+            configure);
 
-	// Success result model
-	private record TestSuccess(string Name, string ProcessingResult);
+    [Fact]
+    public async Task Branch_ExecutesBodyWhenConditionTrue()
+    {
+        var railway = Build(b => b
+            .Branch(
+                p => p.Category == "Premium",
+                br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = "Premium" }))));
 
-	// Error model
-	private record TestError(string Code, string Message);
-	#endregion
+        var result = await railway.Execute(new Req("Premium", 100));
+        result.Right.Result.Should().Be("Premium");
+    }
 
-	[Fact]
-	public async Task Branch_ExecutesWhenConditionIsTrue()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value, request.Category),
-			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(payload))
-		.Group(
-			// Condition: Category is Premium
-			payload => payload.Category == "Premium",
-			branch => branch
-				.Do(payload =>
-				{
-					var processed = payload with
-					{
-						IsPremiumProcessed = true,
-						ProcessingResult = "Premium Processing"
-					};
-					return Either<TestError, TestPayload>.FromRight(processed);
-				})
-		)
-		.Group(
-			// Condition: Category is Standard
-			payload => payload.Category == "Standard",
-			branch => branch
-				.Do(payload =>
-				{
-					var processed = payload with
-					{
-						IsStandardProcessed = true,
-						ProcessingResult = "Standard Processing"
-					};
-					return Either<TestError, TestPayload>.FromRight(processed);
-				})
-		)
-		.Build();
+    [Fact]
+    public async Task Branch_SkipsBodyWhenConditionFalse()
+    {
+        var railway = Build(b => b
+            .Do(p => Either<Err, Pay>.FromRight(p with { Result = "initial" }))
+            .Branch(
+                p => p.Category == "Premium",
+                br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = "Premium" }))));
 
-		var premiumRequest = new TestRequest("Premium Test", 100, "Premium");
-		var standardRequest = new TestRequest("Standard Test", 50, "Standard");
+        var result = await railway.Execute(new Req("Standard", 100));
+        result.Right.Result.Should().Be("initial");
+    }
 
-		// Act
-		var premiumResult = await workflow.Execute(premiumRequest);
-		var standardResult = await workflow.Execute(standardRequest);
+    [Fact]
+    public async Task Branch_SkipsOnLeft()
+    {
+        bool branchCalled = false;
+        var railway = Build(b => b
+            .Do(_ => Either<Err, Pay>.FromLeft(new Err("E1")))
+            .Branch(
+                p => { branchCalled = true; return true; },
+                br => br.Do(p => Either<Err, Pay>.FromRight(p))));
 
-		// Assert
-		premiumResult.IsRight.Should().BeTrue();
-		premiumResult.Right.ProcessingResult.Should().Be("Premium Processing");
+        var result = await railway.Execute(new Req("x", 1));
+        result.IsLeft.Should().BeTrue();
+        branchCalled.Should().BeFalse();
+    }
 
-		standardResult.IsRight.Should().BeTrue();
-		standardResult.Right.ProcessingResult.Should().Be("Standard Processing");
-	}
+    [Fact]
+    public async Task Branch_PropagatesErrorFromBranchBody()
+    {
+        var railway = Build(b => b
+            .Branch(
+                p => true,
+                br => br.Do(_ => Either<Err, Pay>.FromLeft(new Err("BRANCH_ERR")))));
 
-	[Fact]
-	public async Task Branch_SkipsWhenConditionIsFalse()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value, request.Category),
-			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { ProcessingResult = "Initial Processing" }))
-		.Group(
-			// Condition: Category is Premium and Value is over 1000
-			payload => payload.Category == "Premium" && payload.Value > 1000,
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with
-					{
-						ProcessingResult = "VIP Processing"
-					}))
-		)
-		.Build();
+        var result = await railway.Execute(new Req("x", 1));
+        result.IsLeft.Should().BeTrue();
+        result.Left.Code.Should().Be("BRANCH_ERR");
+    }
 
-		var premiumRequest = new TestRequest("Premium Test", 500, "Premium"); // Doesn't meet Value > 1000 condition
+    [Fact]
+    public async Task Branch_LocalRecoverHandlesError()
+    {
+        var railway = Build(b => b
+            .Branch(
+                p => true,
+                br => br
+                    .Do(_ => Either<Err, Pay>.FromLeft(new Err("INNER")))
+                    .Recover<Err>((err, last) => last with { Result = "recovered" })));
 
-		// Act
-		var result = await workflow.Execute(premiumRequest);
+        var result = await railway.Execute(new Req("x", 1));
+        result.IsRight.Should().BeTrue();
+        result.Right.Result.Should().Be("recovered");
+    }
 
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.ProcessingResult.Should().Be("Initial Processing");
-	}
+    [Fact]
+    public async Task MultipleBranches_ExecuteInOrder()
+    {
+        var railway = Build(b => b
+            .Do(p => Either<Err, Pay>.FromRight(p with { Result = "start" }))
+            .Branch(
+                p => p.Category == "A",
+                br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = p.Result + "+A" })))
+            .Branch(
+                p => p.Value > 50,
+                br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = p.Result + "+High" }))));
 
-	[Fact]
-	public async Task Branch_UnconditionalBranch_AlwaysExecutes()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value, request.Category),
-			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
-		)
-		.Group(
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = "Always Processed" }))
-		)
-		.Build();
-
-		var anyRequest = new TestRequest("Test", 50, "Any");
-
-		// Act
-		var result = await workflow.Execute(anyRequest);
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.ProcessingResult.Should().Be("Always Processed");
-	}
-
-	[Fact]
-	public async Task Branch_MultipleBranches_CorrectlyExecutes()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value, request.Category),
-			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
-		)
-		.Do(payload => Either<TestError, TestPayload>.FromRight(
-			payload with { ProcessingResult = "Initial" }))
-		.Group(
-			// First branch - based on Category
-			payload => payload.Category == "Premium",
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = payload.ProcessingResult + " + Premium" }))
-		)
-		.Group(
-			// Second branch - based on Value
-			payload => payload.Value > 75,
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = payload.ProcessingResult + " + High Value" }))
-		)
-		.Group(
-			// Third branch - always executes
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = payload.ProcessingResult + " + Standard" }))
-		)
-		.Build();
-
-		var premiumHighValueRequest = new TestRequest("Premium High Value", 100, "Premium");
-
-		// Act
-		var result = await workflow.Execute(premiumHighValueRequest);
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		// All three branches should have executed in order
-		result.Right.ProcessingResult.Should().Be("Initial + Premium + High Value + Standard");
-	}
-
-	[Fact]
-	public async Task Branch_WithError_StopsExecutionAndReturnsError()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value, request.Category),
-			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
-		)
-		.Group(
-			payload => payload.Category == "Premium",
-			branch => branch
-				.Do(payload =>
-				{
-					if (payload.Value <= 0)
-					{
-						return Either<TestError, TestPayload>.FromLeft(
-							new TestError("INVALID_PREMIUM_VALUE", "Premium value must be positive"));
-					}
-					return Either<TestError, TestPayload>.FromRight(
-						payload with { ProcessingResult = "Premium Processing" });
-				})
-		)
-		.Group(
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = "Final Processing" }))
-		)
-		.Build();
-
-		var invalidPremiumRequest = new TestRequest("Invalid Premium", 0, "Premium");
-
-		// Act
-		var result = await workflow.Execute(invalidPremiumRequest);
-
-		// Assert
-		result.IsLeft.Should().BeTrue();
-		result.Left.Code.Should().Be("INVALID_PREMIUM_VALUE");
-		// The second branch should not have executed
-	}
-
-	[Fact]
-	public async Task Branch_WithMultipleActivities_ExecutesAllInOrder()
-	{
-		// Arrange
-		var workflow = new RailwayBuilder<TestRequest, TestPayload, TestSuccess, TestError>(
-			request => new TestPayload(request.Name, request.Value, request.Category),
-			payload => new TestSuccess(payload.Name, payload.ProcessingResult ?? "Not processed")
-		)
-		.Group(
-			payload => true,
-			branch => branch
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = "Step 1" }))
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = payload.ProcessingResult + " -> Step 2" }))
-				.Do(payload => Either<TestError, TestPayload>.FromRight(
-					payload with { ProcessingResult = payload.ProcessingResult + " -> Step 3" }))
-		)
-		.Build();
-
-		var request = new TestRequest("Test", 50, "Standard");
-
-		// Act
-		var result = await workflow.Execute(request);
-
-		// Assert
-		result.IsRight.Should().BeTrue();
-		result.Right.ProcessingResult.Should().Be("Step 1 -> Step 2 -> Step 3");
-	}
+        var result = await railway.Execute(new Req("A", 100));
+        result.Right.Result.Should().Be("start+A+High");
+    }
 }
