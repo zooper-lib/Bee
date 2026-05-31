@@ -142,7 +142,7 @@ All step operators are registered on `RailwayStepsBuilder` inside the `steps` la
 
 The most important distinction between operators is **whether their result is fed back into the pipeline**:
 
-- **Payload-replacing** (`Do`, `Branch`, `Recover`) — the operator's return value becomes the new pipeline state. Downstream operators see the updated payload.
+- **Payload-replacing** (`Do`, `Branch`, `Loop`, `Recover`) — the operator's return value becomes the new pipeline state. Downstream operators see the updated payload.
 - **Pass-through** (`Tap`, `TryTap`, `Effects`, `TryEffects`, `Ensure`) — the operator reads the payload but its return value is **not** fed back. The payload flowing to the next operator is identical to what came in.
 - **Fire-and-forget** (`Detach`) — result is discarded and nothing is awaited.
 - **Out-of-band** (`Finally`) — runs outside the pipeline; its return value is discarded and does not affect the pipeline result.
@@ -342,6 +342,60 @@ The inner builder (`BranchBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `T
 
 ---
 
+### Loop
+
+Executes a bounded iteration on the right rail. The body sub-pipeline (`LoopBuilder`) runs repeatedly until `until` returns `true` or `maxAttempts` is exhausted.
+
+**Iteration order** (1-indexed attempt `N`):
+1. Run the body. If it returns `Left`, exit the loop immediately with that `Left`.
+2. Evaluate `until(payload, N)`. If `true`, exit with `Right(payload)`.
+3. If `N == maxAttempts`, exit with `Left(exhausted(payload, N))`.
+4. Apply `mutate(payload, N)` (if provided) to produce the starting payload for iteration `N+1`.
+5. Repeat.
+
+`mutate` never runs before the first iteration or after the loop exits. `exhausted` is the caller's delegate — the library has no default because `TError` is open. `maxAttempts` must be `>= 1`; the builder throws `ArgumentOutOfRangeException` at registration time if not.
+
+`Recover<TErr>` inside the body catches errors scoped to that iteration only — it does not carry over to subsequent iterations.
+
+The inner builder (`LoopBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `Branch`, `Ensure`, and `Recover`. `Loop`, `Detach`, and `Finally` are intentionally excluded.
+
+```csharp
+// Poll-for-ready: no mutate needed
+.Loop(
+    body: lb => lb
+        .Do(async (payload, ct) =>
+        {
+            var ready = await jobService.IsReadyAsync(payload.JobId, ct);
+            return Either<Error, Payload>.FromRight(payload with { Ready = ready });
+        }),
+    until: (payload, _) => payload.Ready,
+    maxAttempts: 10,
+    exhausted: (payload, attempts) => new Error($"Job {payload.JobId} not ready after {attempts} polls"))
+
+// Retry-with-mutation: Recover keeps iterating on transient failures; mutate adjusts for each attempt
+.Loop(
+    body: lb => lb
+        .Do(async (payload, ct) =>
+        {
+            var result = await externalService.CallAsync(payload.Endpoint, ct);
+            if (!result.Success)
+                return Either<Error, Payload>.FromLeft(new TransientError(result.StatusCode));
+            return Either<Error, Payload>.FromRight(payload with { Response = result.Body });
+        })
+        .Recover<TransientError>((err, last) => last with { LastError = err }),
+    until: (payload, _) => payload.Response != null,
+    maxAttempts: 5,
+    exhausted: (payload, attempts) => new Error($"Max retries ({attempts}) exceeded"),
+    mutate: (payload, attempt) => payload with { DelayMs = attempt * 100 })
+```
+
+**Behavior:**
+- **Result IS fed back into the pipeline.** The loop's final `Either` state (from `until`, body `Left`, or exhaustion) replaces the main pipeline state.
+- **On Right:** runs the body iteratively according to the iteration order above
+- **On Left (incoming):** passes through unchanged — `body`, `until`, `mutate`, and `exhausted` are not invoked
+
+---
+
 ### Recover
 
 Recovers from a typed error. When the pipeline is on `Left` and the error value is assignable to `TErr`, the handler runs and its returned payload transitions the pipeline back to `Right`. Non-matching errors and `Right` values pass through unchanged.
@@ -411,6 +465,7 @@ The activity receives the **last known `Right` payload** — if the pipeline nev
 | `TryEffects` | No — payload unchanged | Runs all; state passes through | Skips | Swallowed |
 | `Detach` | No — discarded entirely | Schedules background tasks; returns immediately | Skips | Swallowed |
 | `Branch` | **Yes** — sub-pipeline result | Runs sub-pipeline if predicate true; result is the new state | Skips | Propagate |
+| `Loop` | **Yes** — loop's final Either | Runs body iteratively; exits on `until`, body `Left`, or exhaustion | Passes through unchanged | Propagate |
 | `Recover<TErr>` | **Yes** — recovered payload | Skips | Matching error: handler result becomes new Right | Propagate |
 | `Finally` | No — discarded entirely | Always runs; result ignored | Always runs; result ignored | Swallowed |
 
