@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-05-31
+
+### Added
+
+- **`Loop(body, until, maxAttempts, exhausted, mutate?)` operator** — first-class bounded iteration on the right rail. Runs a nested sub-pipeline body repeatedly until a break condition (`until`) is satisfied or a hard attempt cap (`maxAttempts`) is reached. On exhaustion, exits with a caller-defined `Left` via the `exhausted` delegate. An optional `mutate` hook transforms the payload between iterations. Sync and async overloads provided. `Loop` is not nested (unavailable inside `BranchBuilder` or `LoopBuilder`) for v1.
+
 ## [4.0.0] - 2026-04-21
 
 ### Added

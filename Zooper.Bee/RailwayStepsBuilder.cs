@@ -399,6 +399,158 @@ public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
     }
 
     /// <summary>
+    /// Executes a bounded iteration on the right rail.
+    /// <para>
+    /// When the rail is <c>Right(payload)</c>, runs <paramref name="body"/> repeatedly
+    /// until <paramref name="until"/> returns <c>true</c> or <paramref name="maxAttempts"/>
+    /// iterations have been exhausted without <paramref name="until"/> being satisfied.
+    /// </para>
+    /// <para><strong>Iteration order per attempt (1-indexed):</strong></para>
+    /// <list type="number">
+    ///   <item>Run the body. If the body returns <c>Left</c>, the loop exits immediately with that <c>Left</c>.</item>
+    ///   <item>Evaluate <paramref name="until"/>. If <c>true</c>, exit with <c>Right(payload)</c>.</item>
+    ///   <item>If <c>attempt == maxAttempts</c>, exit with <c>Left(exhausted(payload, attempt))</c>.</item>
+    ///   <item>Apply <paramref name="mutate"/> (if provided) to produce the starting payload for the next iteration.</item>
+    ///   <item>Advance to the next iteration.</item>
+    /// </list>
+    /// <para><strong>Left passthrough:</strong> when the rail is <c>Left</c> at the start of <c>Loop</c>,
+    /// the <c>Left</c> passes through unchanged; <paramref name="body"/>, <paramref name="until"/>,
+    /// <paramref name="mutate"/>, and <paramref name="exhausted"/> are not invoked.</para>
+    /// <para><strong>mutate cannot fail the rail:</strong> <paramref name="mutate"/> is a pure payload
+    /// transform. Fallible work should be expressed as a <c>Do</c> at the start of the next body.</para>
+    /// <para><strong>Recover scoping:</strong> a <c>Recover</c> inside the body is scoped to errors raised
+    /// within the same iteration. A <c>Left</c> not caught by a body-level <c>Recover</c> exits the entire loop.</para>
+    /// <para><strong>exhausted is the caller's delegate:</strong> no default error is provided because
+    /// <typeparamref name="TError"/> is open; the caller chooses what <c>Left</c> represents exhaustion.</para>
+    /// </summary>
+    /// <param name="body">Configures the inner sub-pipeline that runs on each iteration.</param>
+    /// <param name="until">Break condition evaluated after each iteration; receives <c>(payload, attempt)</c>. Loop exits <c>Right</c> when <c>true</c>.</param>
+    /// <param name="maxAttempts">Hard upper bound on iterations. Must be <c>&gt;= 1</c>.</param>
+    /// <param name="exhausted">Produces the <c>Left</c> value when <paramref name="maxAttempts"/> is reached without <paramref name="until"/> being satisfied.</param>
+    /// <param name="mutate">Optional inter-iteration payload transform applied after <paramref name="until"/> is <c>false</c> and before the next iteration. Never runs before the first iteration or after the loop exits.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown at registration time when <paramref name="maxAttempts"/> is less than 1.</exception>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Loop(
+        Action<LoopBuilder<TPayload, TError>> body,
+        Func<TPayload, int, bool> until,
+        int maxAttempts,
+        Func<TPayload, int, TError> exhausted,
+        Func<TPayload, int, TPayload>? mutate = null)
+    {
+        if (maxAttempts < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxAttempts), maxAttempts,
+                "maxAttempts must be >= 1.");
+
+        // Lift sync delegates to async so we share one core implementation.
+        Func<TPayload, int, CancellationToken, Task<bool>> untilAsync =
+            (p, a, _) => Task.FromResult(until(p, a));
+        Func<TPayload, int, CancellationToken, Task<TError>> exhaustedAsync =
+            (p, a, _) => Task.FromResult(exhausted(p, a));
+        Func<TPayload, int, CancellationToken, Task<TPayload>>? mutateAsync =
+            mutate == null ? null : (TPayload p, int a, CancellationToken _) => Task.FromResult(mutate(p, a));
+
+        return LoopCore(body, untilAsync, maxAttempts, exhaustedAsync, mutateAsync);
+    }
+
+    /// <summary>
+    /// Executes a bounded iteration on the right rail using asynchronous hooks.
+    /// <para>
+    /// When the rail is <c>Right(payload)</c>, runs <paramref name="body"/> repeatedly
+    /// until <paramref name="until"/> returns <c>true</c> or <paramref name="maxAttempts"/>
+    /// iterations have been exhausted without <paramref name="until"/> being satisfied.
+    /// </para>
+    /// <para><strong>Iteration order per attempt (1-indexed):</strong></para>
+    /// <list type="number">
+    ///   <item>Run the body. If the body returns <c>Left</c>, the loop exits immediately with that <c>Left</c>.</item>
+    ///   <item>Evaluate <paramref name="until"/>. If <c>true</c>, exit with <c>Right(payload)</c>.</item>
+    ///   <item>If <c>attempt == maxAttempts</c>, exit with <c>Left(exhausted(payload, attempt))</c>.</item>
+    ///   <item>Apply <paramref name="mutate"/> (if provided) to produce the starting payload for the next iteration.</item>
+    ///   <item>Advance to the next iteration.</item>
+    /// </list>
+    /// <para><strong>Left passthrough:</strong> when the rail is <c>Left</c> at the start of <c>Loop</c>,
+    /// the <c>Left</c> passes through unchanged; <paramref name="body"/>, <paramref name="until"/>,
+    /// <paramref name="mutate"/>, and <paramref name="exhausted"/> are not invoked.</para>
+    /// <para><strong>CancellationToken:</strong> the token is threaded into all async delegates.
+    /// <c>OperationCanceledException</c> propagates from the body per existing executor behaviour.</para>
+    /// <para><strong>Mixed sync/async:</strong> to combine a sync hook with async ones, pass the async
+    /// overload directly and wrap sync values in <c>Task.FromResult</c>.</para>
+    /// <para><strong>mutate cannot fail the rail:</strong> <paramref name="mutate"/> is a pure payload
+    /// transform. Fallible work should be expressed as a <c>Do</c> at the start of the next body.</para>
+    /// <para><strong>Recover scoping:</strong> a <c>Recover</c> inside the body is scoped to errors raised
+    /// within the same iteration. A <c>Left</c> not caught by a body-level <c>Recover</c> exits the entire loop.</para>
+    /// <para><strong>exhausted is the caller's delegate:</strong> no default error is provided because
+    /// <typeparamref name="TError"/> is open; the caller chooses what <c>Left</c> represents exhaustion.</para>
+    /// </summary>
+    /// <param name="body">Configures the inner sub-pipeline that runs on each iteration.</param>
+    /// <param name="until">Async break condition evaluated after each iteration; receives <c>(payload, attempt, ct)</c>. Loop exits <c>Right</c> when <c>true</c>.</param>
+    /// <param name="maxAttempts">Hard upper bound on iterations. Must be <c>&gt;= 1</c>.</param>
+    /// <param name="exhausted">Async delegate that produces the <c>Left</c> value when <paramref name="maxAttempts"/> is reached without <paramref name="until"/> being satisfied.</param>
+    /// <param name="mutate">Optional async inter-iteration payload transform. Never runs before the first iteration or after the loop exits.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown at registration time when <paramref name="maxAttempts"/> is less than 1.</exception>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Loop(
+        Action<LoopBuilder<TPayload, TError>> body,
+        Func<TPayload, int, CancellationToken, Task<bool>> until,
+        int maxAttempts,
+        Func<TPayload, int, CancellationToken, Task<TError>> exhausted,
+        Func<TPayload, int, CancellationToken, Task<TPayload>>? mutate = null)
+    {
+        if (maxAttempts < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxAttempts), maxAttempts,
+                "maxAttempts must be >= 1.");
+
+        return LoopCore(body, until, maxAttempts, exhausted, mutate);
+    }
+
+    private RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> LoopCore(
+        Action<LoopBuilder<TPayload, TError>> body,
+        Func<TPayload, int, CancellationToken, Task<bool>> until,
+        int maxAttempts,
+        Func<TPayload, int, CancellationToken, Task<TError>> exhausted,
+        Func<TPayload, int, CancellationToken, Task<TPayload>>? mutate)
+    {
+        var loopBuilder = new LoopBuilder<TPayload, TError>();
+        body(loopBuilder);
+        var loopOps = loopBuilder.Operators;
+
+        _operators.Add(async (current, _, ct) =>
+        {
+            // Left passthrough: do not invoke any loop hook.
+            if (!current.IsRight) return current;
+
+            var state = current.Right!;
+
+            for (var attempt = 1; ; attempt++)
+            {
+                // 1. Run the body on a fresh Right(state) for this iteration.
+                var bodyCurrent = Either<TError, TPayload>.FromRight(state);
+                var bodyLastRight = state;
+                foreach (var op in loopOps)
+                {
+                    if (bodyCurrent.IsRight) bodyLastRight = bodyCurrent.Right!;
+                    bodyCurrent = await op(bodyCurrent, bodyLastRight, ct);
+                }
+
+                // 2. Body short-circuit: exit immediately with the Left.
+                if (!bodyCurrent.IsRight) return bodyCurrent;
+
+                state = bodyCurrent.Right!;
+
+                // 3. Check break condition.
+                if (await until(state, attempt, ct))
+                    return Either<TError, TPayload>.FromRight(state);
+
+                // 4. Check exhaustion (mutate does NOT run after the final iteration).
+                if (attempt == maxAttempts)
+                    return Either<TError, TPayload>.FromLeft(await exhausted(state, attempt, ct));
+
+                // 5. Inter-iteration mutation.
+                if (mutate != null)
+                    state = await mutate(state, attempt, ct);
+            }
+        });
+        return this;
+    }
+
+    /// <summary>
     /// Builds and returns the configured <see cref="Railway{TRequest,TSuccess,TError}"/> ready for execution.
     /// </summary>
     public Railway<TRequest, TSuccess, TError> Build() => new(ExecuteRailwayAsync);

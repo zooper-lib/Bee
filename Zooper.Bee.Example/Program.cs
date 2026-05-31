@@ -9,6 +9,8 @@ await RunOrderProcessingExample();
 await RunBranchingExample();
 await RunRecoveryExample();
 await RunParameterlessExample();
+await RunPollForReadyExample();
+await RunRetryWithMutationExample();
 Console.WriteLine("\nAll examples complete.");
 return;
 
@@ -105,6 +107,81 @@ static async Task RunParameterlessExample()
     Console.WriteLine($"  Counter after 3 steps: {result.Right.FinalCount}");
 }
 
+// ── Loop: poll-for-ready ─────────────────────────────────────────────────────
+
+static async Task RunPollForReadyExample()
+{
+    Console.WriteLine("\n=== Loop: Poll-for-Ready ===");
+
+    // Simulate a job that becomes ready on the 3rd poll.
+    var railway = Railway.Create<PollRequest, PollPayload, PollSuccess, PollError>(
+        r => new PollPayload(r.JobId),
+        p => new PollSuccess(p.JobId, p.PollCount),
+        steps => steps
+            .Loop(
+                body: lb => lb
+                    .Do(async (p, ct) =>
+                    {
+                        // Simulate checking job readiness.
+                        await Task.Delay(5, ct);
+                        var ready = p.PollCount + 1 >= 3;
+                        Console.WriteLine($"  Poll {p.PollCount + 1}: ready={ready}");
+                        return Either<PollError, PollPayload>.FromRight(
+                            p with { PollCount = p.PollCount + 1, Ready = ready });
+                    }),
+                until: (p, _) => p.Ready,
+                maxAttempts: 10,
+                exhausted: (p, a) => new PollError("TIMEOUT", a)));
+
+    var result = await railway.Execute(new PollRequest("job-abc"));
+    Console.WriteLine(result.IsRight
+        ? $"  Job ready after {result.Right.PollCount} poll(s)"
+        : $"  Timed out after {result.Left!.Attempts} attempt(s)");
+}
+
+// ── Loop: retry-with-mutation ────────────────────────────────────────────────
+
+static async Task RunRetryWithMutationExample()
+{
+    Console.WriteLine("\n=== Loop: Retry-with-Mutation ===");
+
+    // Simulate a flaky service: fails (503) on attempts 1 and 2, succeeds on 3.
+    var railway = Railway.Create<RetryRequest, RetryPayload, RetrySuccess, RetryError>(
+        r => new RetryPayload(r.Endpoint),
+        p => new RetrySuccess(p.Response!, p.Attempt),
+        steps => steps
+            .Loop(
+                body: lb => lb
+                    .Do(async (p, ct) =>
+                    {
+                        // Simulate network call with optional back-off delay.
+                        if (p.DelayMs > 0) await Task.Delay(p.DelayMs, ct);
+                        Console.WriteLine($"  Attempt {p.Attempt + 1} → calling {p.Endpoint}");
+                        // Fail on attempts 1 and 2.
+                        if (p.Attempt < 2)
+                            return Either<RetryError, RetryPayload>.FromLeft(
+                                new ServiceUnavailableError("SERVICE_UNAVAILABLE", 503));
+                        return Either<RetryError, RetryPayload>.FromRight(
+                            p with { Attempt = p.Attempt + 1, Response = "OK" });
+                    })
+                    // Recover per-iteration: a 503 is transient — keep iterating.
+                    .Recover<ServiceUnavailableError>((err, last) =>
+                    {
+                        Console.WriteLine($"  Transient {err.StatusCode} on attempt {last.Attempt + 1} — will retry");
+                        return last with { Attempt = last.Attempt + 1 };
+                    }),
+                until: (p, _) => p.Response != null,
+                maxAttempts: 5,
+                exhausted: (p, a) => new RetryError("MAX_RETRIES", a),
+                // Mutate: increase delay between iterations (simple linear back-off).
+                mutate: (p, a) => p with { DelayMs = a * 10 }));
+
+    var result = await railway.Execute(new RetryRequest("https://api.example.com/data"));
+    Console.WriteLine(result.IsRight
+        ? $"  Succeeded: '{result.Right.Response}' after {result.Right.Attempts} attempt(s)"
+        : $"  Failed: {result.Left!.Code} after {result.Left.Attempts} attempt(s)");
+}
+
 // ===== Records =====
 record OrderRequest(string CustomerId, decimal Amount);
 record OrderPayload(string CustomerId, decimal Amount, string? OrderId = null, string? Status = null);
@@ -125,3 +202,14 @@ record InsufficientFundsError(string Code, decimal Shortfall) : PayError(Code);
 record SyncPayload(int Counter = 0);
 record SyncSuccess(int FinalCount);
 record SyncError(string Code);
+
+record PollRequest(string JobId);
+record PollPayload(string JobId, int PollCount = 0, bool Ready = false);
+record PollSuccess(string JobId, int PollCount);
+record PollError(string Code, int Attempts);
+
+record RetryRequest(string Endpoint);
+record RetryPayload(string Endpoint, int Attempt = 0, string? Response = null, int DelayMs = 0);
+record RetrySuccess(string Response, int Attempts);
+record RetryError(string Code, int Attempts);
+record ServiceUnavailableError(string Code, int StatusCode) : RetryError(Code, 0);
