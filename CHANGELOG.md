@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: Three-phase railway execution model** — a railway now runs in three structurally separate phases that always execute in order: **Validation → Guarding → Steps**. `Validate` is registered through a new `validations` builder; `Guard` remains on the `guards` builder. Previously both `Guard` and `Validate` lived on the guard builder, where validations always ran before guards regardless of call order — confusing and invisible in the API.
+  - **Migration:** move `.Validate(...)` calls from the `guards` delegate into a new `validations` delegate: `Railway.Create(factory, selector, validations: v => v.Validate(...), guards: g => g.Guard(...), steps: ...)`. The `guards`-only and `steps`-only overloads are unchanged, so call sites that used only `.Guard(...)` keep compiling.
+
+### Added
+
+- **`RailwayValidationBuilder<TRequest, TPayload, TSuccess, TError>`** — dedicated builder for the validation phase, exposing sync and async `Validate` overloads.
+- **`Railway.Create` overloads with an optional `validations` delegate** — for both request-based and parameterless railways.
+
 ## [4.1.0] - 2026-05-31
 
 ### Added

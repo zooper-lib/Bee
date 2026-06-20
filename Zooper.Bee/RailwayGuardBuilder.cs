@@ -10,10 +10,11 @@ using Zooper.Fox;
 namespace Zooper.Bee;
 
 /// <summary>
-/// Builds the guard and validation phase of a railway.
-/// Obtained via <see cref="Railway.Create{TRequest,TPayload,TSuccess,TError}(System.Func{TRequest,TPayload},System.Func{TPayload,TSuccess},System.Action{RailwayGuardBuilder{TRequest,TPayload,TSuccess,TError}},System.Action{RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}})"/>.
-/// Guards and validations registered here always execute before any step registered on
-/// <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}"/>.
+/// Builds the guarding phase of a railway. This is the second of three execution phases:
+/// Validation (see <see cref="RailwayValidationBuilder{TRequest,TPayload,TSuccess,TError}"/>),
+/// then Guarding, then Steps (see <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}"/>).
+/// Guards registered here always execute after every validation and before any step.
+/// To register validations, use <see cref="RailwayValidationBuilder{TRequest,TPayload,TSuccess,TError}"/>.
 /// </summary>
 /// <typeparam name="TRequest">The type of the request input.</typeparam>
 /// <typeparam name="TPayload">The type of the payload used to carry intermediate data.</typeparam>
@@ -22,7 +23,6 @@ namespace Zooper.Bee;
 public sealed class RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>
 {
     internal List<RailwayGuard<TRequest, TError>> Guards { get; } = [];
-    internal List<RailwayValidation<TRequest, TError>> Validations { get; } = [];
 
     internal RailwayGuardBuilder() { }
 
@@ -49,30 +49,6 @@ public sealed class RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>
         Func<TRequest, Either<TError, Unit>> guard)
     {
         Guards.Add(new((request, _) => Task.FromResult(guard(request))));
-        return this;
-    }
-
-    /// <summary>
-    /// Adds a validation rule to the railway.
-    /// </summary>
-    /// <param name="validation">The validation function</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> Validate(
-        Func<TRequest, CancellationToken, Task<Option<TError>>> validation)
-    {
-        Validations.Add(new(validation));
-        return this;
-    }
-
-    /// <summary>
-    /// Adds a synchronous validation rule to the railway.
-    /// </summary>
-    /// <param name="validation">The validation function</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> Validate(
-        Func<TRequest, Option<TError>> validation)
-    {
-        Validations.Add(new((request, _) => Task.FromResult(validation(request))));
         return this;
     }
 }

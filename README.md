@@ -55,15 +55,24 @@ else
 ## Creating a Railway
 
 ```csharp
-// With guards
+// With validations and guards
+var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
+    factory:     request => new TPayload(request),
+    selector:    payload => new TSuccess(payload.Result),
+    validations: v => v.Validate(...).Validate(...),
+    guards:      g => g.Guard(...).Guard(...),
+    steps:       s => s.Do(...).Tap(...).Finally(...)
+);
+
+// Guards only (no validations)
 var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
     factory:  request => new TPayload(request),
     selector: payload => new TSuccess(payload.Result),
-    guards:   g => g.Guard(...).Validate(...),
-    steps:    s => s.Do(...).Tap(...).Finally(...)
+    guards:   g => g.Guard(...),
+    steps:    s => s.Do(...).Tap(...)
 );
 
-// Without guards
+// Steps only (no validations or guards)
 var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
     factory:  request => new TPayload(request),
     selector: payload => new TSuccess(payload.Result),
@@ -78,17 +87,37 @@ var railway = Railway.Create<TPayload, TSuccess, TError>(
 );
 ```
 
-The `guards` and `steps` phases are structurally separate — `Guard`/`Validate` are only available in the guard builder, and pipeline operators are only available in the steps builder.
+A railway runs in three structurally separate phases that always execute in this order: **Validation → Guarding → Steps**. Each phase has its own builder — `Validate` is only available in the validation builder, `Guard` only in the guard builder, and pipeline operators only in the steps builder. The phase a check belongs to is determined by which delegate registers it, not by call order.
 
 ---
 
-## Guard Phase
+## Validation Phase
 
-Guards and validations run before the payload is created, providing the earliest possible short-circuit.
+Validations run **first**, before guards and before the payload is created. They use `Option<TError>` — return `Some(error)` to reject or `None` to allow. Suited for input validation rules.
 
-### Guard
+```csharp
+validations: v => v
+    .Validate(request => string.IsNullOrEmpty(request.Name)
+        ? Option<Error>.Some(new Error("Name is required"))
+        : Option<Error>.None)
 
-Checks whether the railway is allowed to execute — authentication, authorization, feature flags, etc. Returns `Right(Unit)` to allow or `Left(error)` to reject.
+    .Validate(async (request, ct) =>
+    {
+        var exists = await db.ExistsAsync(request.Id, ct);
+        return exists ? Option<Error>.None : Option<Error>.Some(new Error("Not found"));
+    })
+```
+
+**Behavior:**
+- Run before guards and before any step (earliest possible short-circuit)
+- Execute in registration order; first failing validation short-circuits — subsequent validations, all guards, and all steps do not run
+- On failure: returns `Left(error)`, pipeline does not execute
+
+---
+
+## Guarding Phase
+
+Guards run **after** all validations pass and before the payload is created. They check whether the railway is allowed to execute — authentication, authorization, feature flags, etc. Return `Right(Unit)` to allow or `Left(error)` to reject.
 
 ```csharp
 guards: g => g
@@ -108,30 +137,8 @@ guards: g => g
 ```
 
 **Behavior:**
-- Runs before any step and before the payload is created
-- First failing guard short-circuits — subsequent guards do not run
-- On failure: returns `Left(error)`, pipeline does not execute
-
-### Validate
-
-Like `Guard` but uses `Option<TError>` — return `Some(error)` to reject or `None` to allow. Suited for input validation rules.
-
-```csharp
-guards: g => g
-    .Validate(request => string.IsNullOrEmpty(request.Name)
-        ? Option<Error>.Some(new Error("Name is required"))
-        : Option<Error>.None)
-
-    .Validate(async (request, ct) =>
-    {
-        var exists = await db.ExistsAsync(request.Id, ct);
-        return exists ? Option<Error>.None : Option<Error>.Some(new Error("Not found"));
-    })
-```
-
-**Behavior:**
-- Validations run before guards
-- First failing validation short-circuits
+- Run after all validations pass, before any step and before the payload is created
+- Execute in registration order; first failing guard short-circuits — subsequent guards and all steps do not run
 - On failure: returns `Left(error)`, pipeline does not execute
 
 ---
