@@ -12,7 +12,7 @@ namespace Zooper.Bee;
 /// Builder for the body sub-pipeline used by the <c>Loop</c> operator on
 /// <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}"/>.
 /// Exposes <c>Do</c>, <c>Tap</c>, <c>Effects</c>, <c>TryTap</c>, <c>TryEffects</c>,
-/// <c>Branch</c>, <c>Ensure</c>, and <c>Recover</c>.
+/// <c>When</c>, <c>Ensure</c>, and <c>Recover</c>.
 /// <c>Loop</c>, <c>Detach</c>, and <c>Finally</c> are intentionally omitted to
 /// prevent nested loops and keep lifecycle concerns at the top level.
 /// </summary>
@@ -183,24 +183,24 @@ public sealed class LoopBuilder<TPayload, TError>
 	}
 
 	/// <summary>
-	/// Conditionally enters a sub-pipeline when <paramref name="when"/> returns <c>true</c>.
+	/// Conditionally enters a sub-pipeline when <paramref name="condition"/> returns <c>true</c>.
 	/// The sub-pipeline's final <see cref="Either{TError,TPayload}"/> state replaces the loop body state.
 	/// <para>On <c>Right</c>, predicate <c>true</c>: runs the sub-pipeline; its result becomes the new state.</para>
 	/// <para>On <c>Right</c>, predicate <c>false</c>: no-op, existing state passes through unchanged.</para>
 	/// <para>On <c>Left</c>: skips — predicate is not evaluated.</para>
 	/// </summary>
-	public LoopBuilder<TPayload, TError> Branch(
-		Func<TPayload, bool> when,
-		Action<BranchBuilder<TPayload, TError>> branch)
+	public LoopBuilder<TPayload, TError> When(
+		Func<TPayload, bool> condition,
+		Action<BranchBuilder<TPayload, TError>> configure)
 	{
 		var branchBuilder = new BranchBuilder<TPayload, TError>();
-		branch(branchBuilder);
+		configure(branchBuilder);
 		var branchOps = branchBuilder.Operators;
 
 		Operators.Add(async (current, _, ct) =>
 		{
 			if (!current.IsRight) return current;
-			if (!when(current.Right!)) return current;
+			if (!condition(current.Right!)) return current;
 
 			var branchCurrent = current;
 			var branchLastRight = current.Right!;
@@ -213,6 +213,15 @@ public sealed class LoopBuilder<TPayload, TError>
 		});
 		return this;
 	}
+
+	/// <summary>
+	/// Deprecated alias for <see cref="When(System.Func{TPayload,bool},System.Action{BranchBuilder{TPayload,TError}})"/>.
+	/// </summary>
+	[Obsolete("Use When instead. Branch will be removed in the next major version.")]
+	public LoopBuilder<TPayload, TError> Branch(
+		Func<TPayload, bool> when,
+		Action<BranchBuilder<TPayload, TError>> branch)
+		=> When(when, branch);
 
 	/// <summary>
 	/// Adds a business-rule enforcement operator. When <paramref name="when"/> returns <c>true</c>

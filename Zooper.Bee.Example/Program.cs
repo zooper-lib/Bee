@@ -52,13 +52,13 @@ static async Task RunBranchingExample()
         r => new ShipPayload(r.Category, r.Weight),
         p => new ShipSuccess(p.Method ?? "Standard", p.ShippingCost),
         steps => steps
-            .Branch(
+            .When(
                 p => p.Category == "Express",
                 br => br
                     .Ensure(p => p.Weight <= 30, p => new ShipError("OVERWEIGHT"))
                     .Do(p => Either<ShipError, ShipPayload>.FromRight(
                         p with { Method = "Express", ShippingCost = p.Weight * 5m })))
-            .Branch(
+            .When(
                 p => p.Category == "Standard",
                 br => br
                     .Do(p => Either<ShipError, ShipPayload>.FromRight(

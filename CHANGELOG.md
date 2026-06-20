@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Conditional guards via `When` on the guard builder** — `RailwayGuardBuilder.When(condition, configure)` registers a group of guards that run only when a predicate over the request holds. When the condition is `false` the whole group is skipped (treated as a pass); when `true` its guards run as normal (first failure short-circuits). Sync (`Func<TRequest, bool>`) and async (`Func<TRequest, CancellationToken, Task<bool>>`) condition forms are provided, and groups may nest (conditions compose with logical AND, short-circuiting). Plain `Guard(...)` registered outside a `When` group still always runs.
+
 ### Changed
 
+- **`Branch` renamed to `When` on `RailwayStepsBuilder` and `LoopBuilder`** — the conditional sub-pipeline operator has no else path (it conditionally includes, it does not fork), so `When` is the canonical name. `Branch` is retained as an `[Obsolete]` alias that forwards to `When` and emits a deprecation warning; it will be removed in the next major version.
+  - **Migration:** rename `.Branch(when, configure)` to `.When(condition, configure)`. Behavior is identical; the `Branch` alias keeps existing call sites compiling (with a warning) until the next major version.
 - **BREAKING: Three-phase railway execution model** — a railway now runs in three structurally separate phases that always execute in order: **Validation → Guarding → Steps**. `Validate` is registered through a new `validations` builder; `Guard` remains on the `guards` builder. Previously both `Guard` and `Validate` lived on the guard builder, where validations always ran before guards regardless of call order — confusing and invisible in the API.
   - **Migration:** move `.Validate(...)` calls from the `guards` delegate into a new `validations` delegate: `Railway.Create(factory, selector, validations: v => v.Validate(...), guards: g => g.Guard(...), steps: ...)`. The `guards`-only and `steps`-only overloads are unchanged, so call sites that used only `.Guard(...)` keep compiling.
 

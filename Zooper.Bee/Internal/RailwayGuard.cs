@@ -15,11 +15,20 @@ internal sealed class RailwayGuard<TRequest, TError>
 	private readonly Func<TRequest, CancellationToken, Task<Either<TError, Unit>>> _condition;
 	private readonly string? _name;
 
+	/// <summary>
+	/// Optional predicate over the request that gates whether this guard runs.
+	/// When <c>null</c>, the guard always runs. When non-null and it returns <c>false</c>,
+	/// the guard is skipped and treated as a pass.
+	/// </summary>
+	public Func<TRequest, CancellationToken, Task<bool>>? When { get; }
+
 	public RailwayGuard(
 		Func<TRequest, CancellationToken, Task<Either<TError, Unit>>> condition,
+		Func<TRequest, CancellationToken, Task<bool>>? when = null,
 		string? name = null)
 	{
 		_condition = condition;
+		When = when;
 		_name = name;
 	}
 
