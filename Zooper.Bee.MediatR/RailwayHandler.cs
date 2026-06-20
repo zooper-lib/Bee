@@ -11,7 +11,8 @@ namespace Zooper.Bee.MediatR;
 /// <summary>
 /// Base class for railway handlers that process requests through MediatR.
 /// Override <see cref="ConfigureSteps"/> to define the step execution phase,
-/// and optionally override <see cref="ConfigureGuards"/> to add guards/validations.
+/// and optionally override <see cref="ConfigureValidations"/> and/or <see cref="ConfigureGuards"/>.
+/// The phases run in order: Validation, then Guarding, then Steps.
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TPayload">The internal railway payload type.</typeparam>
@@ -28,7 +29,13 @@ public abstract class RailwayHandler<TRequest, TPayload, TSuccess, TError>
 	protected abstract Func<TPayload, TSuccess> ResultSelector { get; }
 
 	/// <summary>
-	/// Configures guards and validations. Override to add guards; the default adds none.
+	/// Configures the validation phase, which runs first. Override to add validations; the default adds none.
+	/// </summary>
+	protected virtual void ConfigureValidations(
+		RailwayValidationBuilder<TRequest, TPayload, TSuccess, TError> builder) { }
+
+	/// <summary>
+	/// Configures the guarding phase, which runs after validations. Override to add guards; the default adds none.
 	/// </summary>
 	protected virtual void ConfigureGuards(
 		RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> builder) { }
@@ -43,7 +50,7 @@ public abstract class RailwayHandler<TRequest, TPayload, TSuccess, TError>
 		CancellationToken cancellationToken)
 	{
 		var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
-			PayloadFactory, ResultSelector, ConfigureGuards, ConfigureSteps);
+			PayloadFactory, ResultSelector, ConfigureValidations, ConfigureGuards, ConfigureSteps);
 		return railway.Execute(request, cancellationToken);
 	}
 }

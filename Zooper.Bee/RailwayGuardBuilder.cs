@@ -10,10 +10,11 @@ using Zooper.Fox;
 namespace Zooper.Bee;
 
 /// <summary>
-/// Builds the guard and validation phase of a railway.
-/// Obtained via <see cref="Railway.Create{TRequest,TPayload,TSuccess,TError}(System.Func{TRequest,TPayload},System.Func{TPayload,TSuccess},System.Action{RailwayGuardBuilder{TRequest,TPayload,TSuccess,TError}},System.Action{RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}})"/>.
-/// Guards and validations registered here always execute before any step registered on
-/// <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}"/>.
+/// Builds the guarding phase of a railway. This is the second of three execution phases:
+/// Validation (see <see cref="RailwayValidationBuilder{TRequest,TPayload,TSuccess,TError}"/>),
+/// then Guarding, then Steps (see <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}"/>).
+/// Guards registered here always execute after every validation and before any step.
+/// To register validations, use <see cref="RailwayValidationBuilder{TRequest,TPayload,TSuccess,TError}"/>.
 /// </summary>
 /// <typeparam name="TRequest">The type of the request input.</typeparam>
 /// <typeparam name="TPayload">The type of the payload used to carry intermediate data.</typeparam>
@@ -22,7 +23,6 @@ namespace Zooper.Bee;
 public sealed class RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>
 {
     internal List<RailwayGuard<TRequest, TError>> Guards { get; } = [];
-    internal List<RailwayValidation<TRequest, TError>> Validations { get; } = [];
 
     internal RailwayGuardBuilder() { }
 
@@ -53,26 +53,49 @@ public sealed class RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>
     }
 
     /// <summary>
-    /// Adds a validation rule to the railway.
+    /// Registers a group of guards that only run when <paramref name="condition"/> returns <c>true</c>.
+    /// When the condition is <c>false</c>, every guard in the group is skipped and treated as a pass.
     /// </summary>
-    /// <param name="validation">The validation function</param>
+    /// <param name="condition">Synchronous predicate over the request that gates the group.</param>
+    /// <param name="configure">Configures the guards belonging to the conditional group.</param>
     /// <returns>The builder instance for method chaining</returns>
-    public RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> Validate(
-        Func<TRequest, CancellationToken, Task<Option<TError>>> validation)
+    public RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> When(
+        Func<TRequest, bool> condition,
+        Action<RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>> configure)
+        => When((request, _) => Task.FromResult(condition(request)), configure);
+
+    /// <summary>
+    /// Registers a group of guards that only run when <paramref name="condition"/> resolves to <c>true</c>.
+    /// When the condition is <c>false</c>, every guard in the group is skipped and treated as a pass.
+    /// </summary>
+    /// <param name="condition">Asynchronous predicate over the request that gates the group.</param>
+    /// <param name="configure">Configures the guards belonging to the conditional group.</param>
+    /// <returns>The builder instance for method chaining</returns>
+    public RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> When(
+        Func<TRequest, CancellationToken, Task<bool>> condition,
+        Action<RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>> configure)
     {
-        Validations.Add(new(validation));
+        var nested = new RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError>();
+        configure(nested);
+
+        foreach (var guard in nested.Guards)
+        {
+            // Flatten the nested guard into this builder, gated by the group condition.
+            // A nested group's own condition is AND-composed with this one (short-circuiting).
+            var effective = guard.When is null
+                ? condition
+                : Compose(condition, guard.When);
+
+            Guards.Add(new RailwayGuard<TRequest, TError>(guard.Check, effective));
+        }
+
         return this;
     }
 
-    /// <summary>
-    /// Adds a synchronous validation rule to the railway.
-    /// </summary>
-    /// <param name="validation">The validation function</param>
-    /// <returns>The builder instance for method chaining</returns>
-    public RailwayGuardBuilder<TRequest, TPayload, TSuccess, TError> Validate(
-        Func<TRequest, Option<TError>> validation)
-    {
-        Validations.Add(new((request, _) => Task.FromResult(validation(request))));
-        return this;
-    }
+    private static Func<TRequest, CancellationToken, Task<bool>> Compose(
+        Func<TRequest, CancellationToken, Task<bool>> outer,
+        Func<TRequest, CancellationToken, Task<bool>> inner)
+        => async (request, token) =>
+            await outer(request, token).ConfigureAwait(false)
+            && await inner(request, token).ConfigureAwait(false);
 }

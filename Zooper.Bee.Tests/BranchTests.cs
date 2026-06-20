@@ -24,7 +24,7 @@ public class BranchTests
     public async Task Branch_ExecutesBodyWhenConditionTrue()
     {
         var railway = Build(b => b
-            .Branch(
+            .When(
                 p => p.Category == "Premium",
                 br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = "Premium" }))));
 
@@ -37,7 +37,7 @@ public class BranchTests
     {
         var railway = Build(b => b
             .Do(p => Either<Err, Pay>.FromRight(p with { Result = "initial" }))
-            .Branch(
+            .When(
                 p => p.Category == "Premium",
                 br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = "Premium" }))));
 
@@ -51,7 +51,7 @@ public class BranchTests
         bool branchCalled = false;
         var railway = Build(b => b
             .Do(_ => Either<Err, Pay>.FromLeft(new Err("E1")))
-            .Branch(
+            .When(
                 p => { branchCalled = true; return true; },
                 br => br.Do(p => Either<Err, Pay>.FromRight(p))));
 
@@ -64,7 +64,7 @@ public class BranchTests
     public async Task Branch_PropagatesErrorFromBranchBody()
     {
         var railway = Build(b => b
-            .Branch(
+            .When(
                 p => true,
                 br => br.Do(_ => Either<Err, Pay>.FromLeft(new Err("BRANCH_ERR")))));
 
@@ -77,7 +77,7 @@ public class BranchTests
     public async Task Branch_LocalRecoverHandlesError()
     {
         var railway = Build(b => b
-            .Branch(
+            .When(
                 p => true,
                 br => br
                     .Do(_ => Either<Err, Pay>.FromLeft(new Err("INNER")))
@@ -93,14 +93,28 @@ public class BranchTests
     {
         var railway = Build(b => b
             .Do(p => Either<Err, Pay>.FromRight(p with { Result = "start" }))
-            .Branch(
+            .When(
                 p => p.Category == "A",
                 br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = p.Result + "+A" })))
-            .Branch(
+            .When(
                 p => p.Value > 50,
                 br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = p.Result + "+High" }))));
 
         var result = await railway.Execute(new Req("A", 100));
         result.Right.Result.Should().Be("start+A+High");
+    }
+
+    [Fact]
+    public async Task Branch_DeprecatedAlias_BehavesLikeWhen()
+    {
+#pragma warning disable CS0618 // Branch is obsolete; exercising the forwarding alias on purpose.
+        var railway = Build(b => b
+            .Branch(
+                p => p.Category == "Premium",
+                br => br.Do(p => Either<Err, Pay>.FromRight(p with { Result = "Premium" }))));
+#pragma warning restore CS0618
+
+        var result = await railway.Execute(new Req("Premium", 100));
+        result.Right.Result.Should().Be("Premium");
     }
 }

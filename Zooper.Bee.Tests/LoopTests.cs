@@ -461,7 +461,7 @@ public class LoopTests
                     .TryTap(async (p, ct) => { await Task.Yield(); })                              // TryTap (async)
                     .Effects(fx => fx.Do(p => { _ = p.Value; }))                                   // Effects
                     .TryEffects(fx => fx.Do(p => { _ = p.Value; }))                                // TryEffects
-                    .Branch(p => false, br => br.Do(p => Either<Err, Pay>.FromRight(p)))           // Branch
+                    .When(p => false, br => br.Do(p => Either<Err, Pay>.FromRight(p)))             // When
                     .Ensure(p => true, p => new Err("E"))                                          // Ensure
                     .Recover<Err>((err, last) => last),                                            // Recover
                 until: (_, a) => a == 1,
@@ -499,9 +499,9 @@ public class LoopTests
                         attemptTracker++;
                         return Either<Err, Pay>.FromRight(p with { Attempts = attemptTracker });
                     })
-                    .Branch(
-                        when: p => p.Attempts % 2 == 0,   // branch runs on even attempts
-                        branch: br => br.Do(p =>
+                    .When(
+                        condition: p => p.Attempts % 2 == 0,   // sub-pipeline runs on even attempts
+                        configure: br => br.Do(p =>
                         {
                             branchExecutedAttempts.Add(p.Attempts);
                             return Either<Err, Pay>.FromRight(p with { Note = "branched" });
