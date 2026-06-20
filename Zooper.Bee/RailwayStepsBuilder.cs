@@ -96,29 +96,29 @@ public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
     }
 
     /// <summary>
-    /// Conditionally enters a sub-pipeline when <paramref name="when"/> returns <c>true</c>.
+    /// Conditionally enters a sub-pipeline when <paramref name="condition"/> returns <c>true</c>.
     /// <para>The result <strong>is fed back</strong> — the sub-pipeline's final
     /// <see cref="Either{TError,TPayload}"/> state replaces the main pipeline state.</para>
     /// <para>On <c>Right</c>, predicate <c>true</c>: runs the sub-pipeline; its result becomes the new state.</para>
     /// <para>On <c>Right</c>, predicate <c>false</c>: no-op, existing state passes through unchanged.</para>
     /// <para>On <c>Left</c>: skips — predicate is not evaluated.</para>
-    /// <remarks><c>Branch</c>, <c>Detach</c>, and <c>Finally</c> are intentionally excluded from the inner
-    /// <see cref="BranchBuilder{TPayload,TError}"/> to keep branch scope well-defined.</remarks>
+    /// <remarks><c>When</c>, <c>Detach</c>, and <c>Finally</c> are intentionally excluded from the inner
+    /// <see cref="BranchBuilder{TPayload,TError}"/> to keep the sub-pipeline scope well-defined.</remarks>
     /// </summary>
-    /// <param name="when">Predicate evaluated against the current payload to decide whether to enter the branch.</param>
-    /// <param name="branch">Action that configures the sub-pipeline operators.</param>
-    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Branch(
-        Func<TPayload, bool> when,
-        Action<BranchBuilder<TPayload, TError>> branch)
+    /// <param name="condition">Predicate evaluated against the current payload to decide whether to enter the sub-pipeline.</param>
+    /// <param name="configure">Action that configures the sub-pipeline operators.</param>
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> When(
+        Func<TPayload, bool> condition,
+        Action<BranchBuilder<TPayload, TError>> configure)
     {
         var branchBuilder = new BranchBuilder<TPayload, TError>();
-        branch(branchBuilder);
+        configure(branchBuilder);
         var branchOps = branchBuilder.Operators;
 
         _operators.Add(async (current, _, ct) =>
         {
             if (!current.IsRight) return current;
-            if (!when(current.Right!)) return current;
+            if (!condition(current.Right!)) return current;
 
             var branchCurrent = current;
             var branchLastRight = current.Right!;
@@ -131,6 +131,17 @@ public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
         });
         return this;
     }
+
+    /// <summary>
+    /// Deprecated alias for <see cref="When(System.Func{TPayload,bool},System.Action{BranchBuilder{TPayload,TError}})"/>.
+    /// </summary>
+    /// <param name="when">Predicate evaluated against the current payload to decide whether to enter the sub-pipeline.</param>
+    /// <param name="branch">Action that configures the sub-pipeline operators.</param>
+    [Obsolete("Use When instead. Branch will be removed in the next major version.")]
+    public RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError> Branch(
+        Func<TPayload, bool> when,
+        Action<BranchBuilder<TPayload, TError>> branch)
+        => When(when, branch);
 
     /// <summary>
     /// Adds a strict synchronous pass-through side effect. The payload is never replaced.
@@ -616,6 +627,9 @@ public sealed class RailwayStepsBuilder<TRequest, TPayload, TSuccess, TError>
     {
         foreach (var guard in _guards)
         {
+            // Conditional guards run only when their predicate holds; otherwise skip-as-pass.
+            if (guard.When != null && !await guard.When(request, cancellationToken)) continue;
+
             var result = await guard.Check(request, cancellationToken);
             if (result.IsLeft && result.Left != null) return Either<TError, Unit>.FromLeft(result.Left);
         }

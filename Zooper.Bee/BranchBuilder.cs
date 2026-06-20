@@ -10,11 +10,11 @@ namespace Zooper.Bee;
 
 /// <summary>
 /// Builder for a conditional sub-pipeline used by
-/// <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}.Branch"/>.
+/// <see cref="RailwayStepsBuilder{TRequest,TPayload,TSuccess,TError}.When(System.Func{TPayload,bool},System.Action{BranchBuilder{TPayload,TError}})"/>.
 /// Exposes <c>Do</c>, <c>Tap</c>, <c>Effects</c>, <c>TryTap</c>, <c>TryEffects</c>,
 /// <c>Recover</c>, and <c>Ensure</c>.
-/// <c>Branch</c>, <c>Detach</c>, and <c>Finally</c> are intentionally omitted to
-/// keep the branch scope well-defined.
+/// <c>When</c>, <c>Detach</c>, and <c>Finally</c> are intentionally omitted to
+/// keep the sub-pipeline scope well-defined.
 /// </summary>
 /// <typeparam name="TPayload">The type of the payload.</typeparam>
 /// <typeparam name="TError">The type of the error.</typeparam>

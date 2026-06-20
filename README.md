@@ -55,15 +55,24 @@ else
 ## Creating a Railway
 
 ```csharp
-// With guards
+// With validations and guards
+var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
+    factory:     request => new TPayload(request),
+    selector:    payload => new TSuccess(payload.Result),
+    validations: v => v.Validate(...).Validate(...),
+    guards:      g => g.Guard(...).Guard(...),
+    steps:       s => s.Do(...).Tap(...).Finally(...)
+);
+
+// Guards only (no validations)
 var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
     factory:  request => new TPayload(request),
     selector: payload => new TSuccess(payload.Result),
-    guards:   g => g.Guard(...).Validate(...),
-    steps:    s => s.Do(...).Tap(...).Finally(...)
+    guards:   g => g.Guard(...),
+    steps:    s => s.Do(...).Tap(...)
 );
 
-// Without guards
+// Steps only (no validations or guards)
 var railway = Railway.Create<TRequest, TPayload, TSuccess, TError>(
     factory:  request => new TPayload(request),
     selector: payload => new TSuccess(payload.Result),
@@ -78,17 +87,37 @@ var railway = Railway.Create<TPayload, TSuccess, TError>(
 );
 ```
 
-The `guards` and `steps` phases are structurally separate — `Guard`/`Validate` are only available in the guard builder, and pipeline operators are only available in the steps builder.
+A railway runs in three structurally separate phases that always execute in this order: **Validation → Guarding → Steps**. Each phase has its own builder — `Validate` is only available in the validation builder, `Guard` only in the guard builder, and pipeline operators only in the steps builder. The phase a check belongs to is determined by which delegate registers it, not by call order.
 
 ---
 
-## Guard Phase
+## Validation Phase
 
-Guards and validations run before the payload is created, providing the earliest possible short-circuit.
+Validations run **first**, before guards and before the payload is created. They use `Option<TError>` — return `Some(error)` to reject or `None` to allow. Suited for input validation rules.
 
-### Guard
+```csharp
+validations: v => v
+    .Validate(request => string.IsNullOrEmpty(request.Name)
+        ? Option<Error>.Some(new Error("Name is required"))
+        : Option<Error>.None)
 
-Checks whether the railway is allowed to execute — authentication, authorization, feature flags, etc. Returns `Right(Unit)` to allow or `Left(error)` to reject.
+    .Validate(async (request, ct) =>
+    {
+        var exists = await db.ExistsAsync(request.Id, ct);
+        return exists ? Option<Error>.None : Option<Error>.Some(new Error("Not found"));
+    })
+```
+
+**Behavior:**
+- Run before guards and before any step (earliest possible short-circuit)
+- Execute in registration order; first failing validation short-circuits — subsequent validations, all guards, and all steps do not run
+- On failure: returns `Left(error)`, pipeline does not execute
+
+---
+
+## Guarding Phase
+
+Guards run **after** all validations pass and before the payload is created. They check whether the railway is allowed to execute — authentication, authorization, feature flags, etc. Return `Right(Unit)` to allow or `Left(error)` to reject.
 
 ```csharp
 guards: g => g
@@ -108,31 +137,33 @@ guards: g => g
 ```
 
 **Behavior:**
-- Runs before any step and before the payload is created
-- First failing guard short-circuits — subsequent guards do not run
+- Run after all validations pass, before any step and before the payload is created
+- Execute in registration order; first failing guard short-circuits — subsequent guards and all steps do not run
 - On failure: returns `Left(error)`, pipeline does not execute
 
-### Validate
+### Conditional guards (`When`)
 
-Like `Guard` but uses `Option<TError>` — return `Some(error)` to reject or `None` to allow. Suited for input validation rules.
+Group guards under a condition over the request so they run only when it holds. When the condition is `false`, the whole group is skipped (treated as a pass). The condition has sync and async forms; groups may nest (conditions compose with logical AND).
 
 ```csharp
 guards: g => g
-    .Validate(request => string.IsNullOrEmpty(request.Name)
-        ? Option<Error>.Some(new Error("Name is required"))
-        : Option<Error>.None)
-
-    .Validate(async (request, ct) =>
-    {
-        var exists = await db.ExistsAsync(request.Id, ct);
-        return exists ? Option<Error>.None : Option<Error>.Some(new Error("Not found"));
-    })
+    .Guard(request => /* always runs */ Unit.Value)
+    .When(
+        condition: request => request.PlanTier == PlanTier.Premium,
+        configure: grp => grp
+            .Guard(request => request.SeatsUsed <= request.SeatLimit
+                ? Unit.Value
+                : new Error("Seat limit exceeded"))
+            // async condition form:
+            .Guard(async (request, ct) =>
+                await quotaService.HasQuotaAsync(request.AccountId, ct)
+                    ? Unit.Value
+                    : new Error("Quota exhausted")))
 ```
 
-**Behavior:**
-- Validations run before guards
-- First failing validation short-circuits
-- On failure: returns `Left(error)`, pipeline does not execute
+- **Condition true:** the group's guards run as normal guards (first failure short-circuits)
+- **Condition false:** none of the group's guards run; the rail continues unchanged
+- Plain `Guard(...)` registered outside a `When` group always runs
 
 ---
 
@@ -142,7 +173,7 @@ All step operators are registered on `RailwayStepsBuilder` inside the `steps` la
 
 The most important distinction between operators is **whether their result is fed back into the pipeline**:
 
-- **Payload-replacing** (`Do`, `Branch`, `Loop`, `Recover`) — the operator's return value becomes the new pipeline state. Downstream operators see the updated payload.
+- **Payload-replacing** (`Do`, `When`, `Loop`, `Recover`) — the operator's return value becomes the new pipeline state. Downstream operators see the updated payload.
 - **Pass-through** (`Tap`, `TryTap`, `Effects`, `TryEffects`, `Ensure`) — the operator reads the payload but its return value is **not** fed back. The payload flowing to the next operator is identical to what came in.
 - **Fire-and-forget** (`Detach`) — result is discarded and nothing is awaited.
 - **Out-of-band** (`Finally`) — runs outside the pipeline; its return value is discarded and does not affect the pipeline result.
@@ -311,16 +342,18 @@ Fires a group of effects in the background (`Task.Run`) without awaiting their c
 
 ---
 
-### Branch
+### When
 
 Conditionally enters a sub-pipeline when the predicate returns `true`. The sub-pipeline shares the same `Either<TError, TPayload>` state. When the predicate returns `false`, the operator is a no-op.
 
-The inner builder (`BranchBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `Recover`, and `Ensure`. `Branch`, `Detach`, and `Finally` are intentionally excluded.
+> Formerly named `Branch`. `Branch` is still available as a deprecated alias that forwards to `When`, and will be removed in the next major version.
+
+The inner builder (`BranchBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `Recover`, and `Ensure`. `When`, `Detach`, and `Finally` are intentionally excluded.
 
 ```csharp
-.Branch(
-    when:   payload => payload.CustomerType == CustomerType.Premium,
-    branch: b => b
+.When(
+    condition: payload => payload.CustomerType == CustomerType.Premium,
+    configure: b => b
         .Do(payload =>
         {
             payload.Discount = 0.20m;
@@ -335,7 +368,7 @@ The inner builder (`BranchBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `T
 ```
 
 **Behavior:**
-- **Result IS fed back into the pipeline.** The sub-pipeline's final `Either` state replaces the main pipeline state — downstream operators see whatever payload (or error) the branch produced.
+- **Result IS fed back into the pipeline.** The sub-pipeline's final `Either` state replaces the main pipeline state — downstream operators see whatever payload (or error) the sub-pipeline produced.
 - **On Right, predicate true:** runs the sub-pipeline; its final state becomes the new main pipeline state
 - **On Right, predicate false:** no-op, the existing state passes through unchanged
 - **On Left:** skips — predicate is not evaluated
@@ -357,7 +390,7 @@ Executes a bounded iteration on the right rail. The body sub-pipeline (`LoopBuil
 
 `Recover<TErr>` inside the body catches errors scoped to that iteration only — it does not carry over to subsequent iterations.
 
-The inner builder (`LoopBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `Branch`, `Ensure`, and `Recover`. `Loop`, `Detach`, and `Finally` are intentionally excluded.
+The inner builder (`LoopBuilder`) exposes `Do`, `Tap`, `TryTap`, `Effects`, `TryEffects`, `When`, `Ensure`, and `Recover`. `Loop`, `Detach`, and `Finally` are intentionally excluded.
 
 ```csharp
 // Poll-for-ready: no mutate needed
@@ -464,7 +497,7 @@ The activity receives the **last known `Right` payload** — if the pipeline nev
 | `Effects` | No — payload unchanged | Runs group; first failure switches to error rail | Skips | Propagate |
 | `TryEffects` | No — payload unchanged | Runs all; state passes through | Skips | Swallowed |
 | `Detach` | No — discarded entirely | Schedules background tasks; returns immediately | Skips | Swallowed |
-| `Branch` | **Yes** — sub-pipeline result | Runs sub-pipeline if predicate true; result is the new state | Skips | Propagate |
+| `When` | **Yes** — sub-pipeline result | Runs sub-pipeline if predicate true; result is the new state | Skips | Propagate |
 | `Loop` | **Yes** — loop's final Either | Runs body iteratively; exits on `until`, body `Left`, or exhaustion | Passes through unchanged | Propagate |
 | `Recover<TErr>` | **Yes** — recovered payload | Skips | Matching error: handler result becomes new Right | Propagate |
 | `Finally` | No — discarded entirely | Always runs; result ignored | Always runs; result ignored | Swallowed |
